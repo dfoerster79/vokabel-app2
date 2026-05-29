@@ -66,7 +66,7 @@ export default function OrteImportPage() {
     addLog('🚀 Starte Import über Server-API …')
 
     try {
-      const res = await fetch('/api/orte-import', {
+      const res = await fetch('https://sohmrrsjlijfadrvflwr.supabase.co/functions/v1/orte-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
