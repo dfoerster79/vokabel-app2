@@ -2,49 +2,20 @@ import { useForm } from 'react-hook-form'
 import { supabase } from '../lib/supabase.js'
 import { useNavigate, Link } from 'react-router-dom'
 
-// @example.com is reserved by RFC 2606 for documentation/testing.
-// No mail server exists for it — emails are never delivered.
-// Supabase accepts it as a valid email format.
-const toFakeEmail = (benutzername) =>
-  `${benutzername.trim().toLowerCase()}@example.com`
-
 export default function RegisterPage() {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm()
   const navigate = useNavigate()
   const password = watch('password')
 
   const onSubmit = async ({ benutzername, password, vorname, nachname }) => {
-    const email = toFakeEmail(benutzername)
-
-    // 1. Prüfen ob Benutzername bereits vergeben
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('benutzername', benutzername.trim().toLowerCase())
-      .maybeSingle()
-
-    if (existing) {
-      alert('Dieser Benutzername ist bereits vergeben. Bitte wähle einen anderen.')
-      return
-    }
-
-    // 2. Supabase Auth Account anlegen
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { vorname, nachname, benutzername: benutzername.trim().toLowerCase() } }
+    // Registrierung über Edge Function — kein E-Mail-Versand, sofort bestätigt
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { benutzername, password, vorname, nachname }
     })
-    if (error) { alert(error.message); return }
 
-    // 3. Profil anlegen
-    if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        vorname,
-        nachname,
-        benutzername: benutzername.trim().toLowerCase(),
-        rolle: 'schueler'
-      })
+    if (error || data?.error) {
+      alert(data?.error || error.message)
+      return
     }
 
     alert('Registrierung erfolgreich! Du kannst dich jetzt anmelden.')
