@@ -1,22 +1,23 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
-import { Navigate } from 'react-router-dom'
 
-const adminTools = [
+const adminSections = [
   {
-    icon: '🏫',
-    label: 'Schulen-Import',
-    desc: 'Schulen aus jedeschule.de in die Datenbank importieren',
-    to: '/admin/schulen-import',
-    badge: 'Datenimport',
+    title: 'Verwaltung',
+    items: [
+      { icon: '👤', label: 'Benutzer',  desc: 'Nutzer & Rollen',     to: '/admin/benutzer' },
+      { icon: '🏫', label: 'Schulen',  desc: 'Schulen verwalten',  to: '/admin/schulen' },
+      { icon: '📚', label: 'Fächer',   desc: 'Fächer & Kurse',     to: '/admin/faecher' },
+      { icon: '⚙️',  label: 'System',   desc: 'App-Einstellungen', to: '/admin/system' },
+    ],
   },
   {
-    icon: '🗺️',
-    label: 'Orte-Import',
-    desc: 'Orte mit PLZ und Bundesland-Zuordnung importieren',
-    to: '/admin/orte-import',
-    badge: 'Datenimport',
+    title: 'Datenimport',
+    items: [
+      { icon: '🏫', label: 'Schulen-Import', desc: 'Schulen aus jedeschule.de importieren', to: '/admin/schulen-import' },
+      { icon: '🗺️',  label: 'Orte-Import',   desc: 'Orte mit PLZ und Bundesland importieren', to: '/admin/orte-import' },
+    ],
   },
 ]
 
@@ -56,29 +57,20 @@ export default function AdminPage() {
           <p>Verwaltungswerkzeuge für den Betrieb der App.</p>
         </div>
 
-        <p className="section-title">Verfügbare Tools</p>
-        <div className="menu-grid">
-          {adminTools.map(tool => (
-            <Link key={tool.to} to={tool.to} className="menu-card">
-              <span className="menu-card-icon">{tool.icon}</span>
-              <span className="menu-card-label">{tool.label}</span>
-              <span className="menu-card-desc">{tool.desc}</span>
-              {tool.badge && (
-                <span style={{
-                  marginTop: 8,
-                  display: 'inline-block',
-                  fontSize: 11,
-                  background: 'var(--primary)',
-                  color: '#fff',
-                  borderRadius: 99,
-                  padding: '2px 10px',
-                  fontWeight: 600,
-                  letterSpacing: '0.03em',
-                }}>{tool.badge}</span>
-              )}
-            </Link>
-          ))}
-        </div>
+        {adminSections.map(section => (
+          <div key={section.title}>
+            <p className="section-title">{section.title}</p>
+            <div className="menu-grid">
+              {section.items.map(item => (
+                <Link key={item.to} to={item.to} className="menu-card">
+                  <span className="menu-card-icon">{item.icon}</span>
+                  <span className="menu-card-label">{item.label}</span>
+                  <span className="menu-card-desc">{item.desc}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
