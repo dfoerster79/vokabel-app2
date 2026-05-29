@@ -1,51 +1,85 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useNavigate, Link } from 'react-router-dom'
 
 export default function LoginPage() {
-  const { register, handleSubmit, formState: { errors } } = useForm()
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
+  const [rememberMe, setRememberMe] = useState(true)
+  const [serverError, setServerError] = useState('')
   const setUser = useAuthStore(s => s.setUser)
   const navigate = useNavigate()
 
   const onSubmit = async ({ email, password }) => {
+    setServerError('')
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { alert(error.message); return }
+    if (error) { setServerError(error.message); return }
     setUser(data.user)
     navigate('/dashboard')
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-      <h1>VokabelApp</h1>
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <div>
-          <label>E-Mail / Benutzername</label>
-          <input
-            {...register('email', { required: 'Pflichtfeld' })}
-            autoComplete="username"
-            style={{ display: 'block', width: '100%', marginBottom: 4 }}
-          />
-          {errors.email && <span style={{ color: 'red', fontSize: 12 }}>{errors.email.message}</span>}
+    <div className="page-center">
+      <div className="page-content">
+        <div className="app-logo">
+          <div className="app-logo-icon">📚</div>
+          <span className="app-logo-name">VokabelApp</span>
         </div>
-        <div style={{ marginTop: 12 }}>
-          <label>Passwort / PIN</label>
-          <input
-            type="password"
-            {...register('password', { required: 'Pflichtfeld' })}
-            autoComplete="current-password"
-            style={{ display: 'block', width: '100%', marginBottom: 4 }}
-          />
-          {errors.password && <span style={{ color: 'red', fontSize: 12 }}>{errors.password.message}</span>}
+
+        <div className="card">
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Willkommen 👋</h1>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Melde dich an, um loszulegen.</p>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="form-group">
+              <label className="form-label">E-Mail</label>
+              <input
+                className={`form-input ${errors.email ? 'error' : ''}`}
+                {...register('email', { required: 'Pflichtfeld' })}
+                type="email"
+                autoComplete="username"
+                placeholder="name@schule.de"
+              />
+              {errors.email && <span className="form-error">{errors.email.message}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Passwort</label>
+              <input
+                className={`form-input ${errors.password ? 'error' : ''}`}
+                {...register('password', { required: 'Pflichtfeld' })}
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+              {errors.password && <span className="form-error">{errors.password.message}</span>}
+            </div>
+
+            <label className="checkbox-row">
+              <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} />
+              Angemeldet bleiben
+            </label>
+
+            {serverError && <div className="alert-error">{serverError}</div>}
+
+            <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Anmelden...' : 'Anmelden'}
+            </button>
+          </form>
+
+          <div className="divider" style={{ margin: '20px 0' }}>oder</div>
+
+          <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--text-muted)' }}>
+            Noch kein Konto?{' '}
+            <Link to="/register" style={{ color: 'var(--teal)', fontWeight: 600, textDecoration: 'none' }}>
+              Jetzt registrieren →
+            </Link>
+          </p>
         </div>
-        <button type="submit" style={{ marginTop: 20, width: '100%', padding: '10px 0', background: '#01696f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-          Anmelden
-        </button>
-      </form>
-      <p style={{ marginTop: 16, fontSize: 14 }}>
-        Noch kein Konto?{' '}
-        <Link to="/register">Jetzt registrieren →</Link>
-      </p>
+      </div>
     </div>
   )
 }
