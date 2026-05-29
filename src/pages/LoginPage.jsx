@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useNavigate, Link } from 'react-router-dom'
 
+// Must match the fake email domain used in RegisterPage
+const toFakeEmail = (benutzername) =>
+  `${benutzername.trim().toLowerCase()}@vokabelapp.de`
+
 export default function LoginPage() {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
   const [rememberMe, setRememberMe] = useState(true)
@@ -13,7 +17,7 @@ export default function LoginPage() {
 
   const onSubmit = async ({ benutzername, password }) => {
     setServerError('')
-    const email = `${benutzername.trim().toLowerCase()}@vokabelapp.local`
+    const email = toFakeEmail(benutzername)
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       setServerError('Benutzername oder Passwort falsch.')
