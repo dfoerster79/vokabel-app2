@@ -2,14 +2,13 @@
 // Verwendet SUPABASE_SECRET_KEY (ohne VITE_-Prefix) – umgeht RLS
 import { createClient } from '@supabase/supabase-js'
 
-// URL direkt verwenden – kein Regex-Trimming noetig, da Secret Key den vollen URL braucht
 const supabaseUrl = (process.env.VITE_SUPABASE_URL || '').replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '').replace(/\/$/, '')
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
 
-const BUNDESLAENDER = [
-  'BB','BE','BW','BY','HB','HE','HH','MV','NI','NW','RP','SH','SL','SN','ST','TH'
-]
+// Aktuell aktiv: nur Bayern zum Testen
+const BUNDESLAENDER_AKTIV = ['BY']
 
+// Alle 16 BL fuer die Anzeige
 const BL_NAMEN = {
   BB:'Brandenburg', BE:'Berlin', BW:'Baden-Württemberg', BY:'Bayern',
   HB:'Bremen', HE:'Hessen', HH:'Hamburg', MV:'Mecklenburg-Vorpommern',
@@ -34,7 +33,6 @@ async function fetchSchulenForState(kuerzel) {
 }
 
 export default async function handler(req, res) {
-  // Nur POST erlauben
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
   }
@@ -43,7 +41,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase-Konfiguration fehlt auf dem Server.' })
   }
 
-  // Admin-Client mit Secret Key – umgeht RLS vollstaendig
   const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
   const logs = []
@@ -53,8 +50,9 @@ export default async function handler(req, res) {
   const BATCH = 200
 
   addLog('🚀 Starte API-Abgleich von jedeschule.codefor.de …')
+  addLog(`ℹ️ Aktiver Import: ${BUNDESLAENDER_AKTIV.map(k => BL_NAMEN[k]).join(', ')}`)
 
-  for (const kuerzel of BUNDESLAENDER) {
+  for (const kuerzel of BUNDESLAENDER_AKTIV) {
     const name = BL_NAMEN[kuerzel]
     let schulen = []
     try {
@@ -107,7 +105,7 @@ export default async function handler(req, res) {
 
     totalImported += blImported
     totalErrors += blErrors
-    addLog(`✓ ${name}: ${unique.length.toLocaleString('de-DE')} Schulen`)
+    addLog(`✓ ${name}: ${unique.length.toLocaleString('de-DE')} Schulen (${blImported} importiert, ${blErrors} Fehler)`)
   }
 
   addLog(`Abgeschlossen: ${totalImported.toLocaleString('de-DE')} Schulen importiert, ${totalErrors} Fehler.`)

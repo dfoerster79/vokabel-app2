@@ -3,6 +3,25 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
 
+const ALLE_BL = [
+  { kuerzel: 'BB', name: 'Brandenburg' },
+  { kuerzel: 'BE', name: 'Berlin' },
+  { kuerzel: 'BW', name: 'Baden-Württemberg' },
+  { kuerzel: 'BY', name: 'Bayern', aktiv: true },
+  { kuerzel: 'HB', name: 'Bremen' },
+  { kuerzel: 'HE', name: 'Hessen' },
+  { kuerzel: 'HH', name: 'Hamburg' },
+  { kuerzel: 'MV', name: 'Mecklenburg-Vorpommern' },
+  { kuerzel: 'NI', name: 'Niedersachsen' },
+  { kuerzel: 'NW', name: 'Nordrhein-Westfalen' },
+  { kuerzel: 'RP', name: 'Rheinland-Pfalz' },
+  { kuerzel: 'SH', name: 'Schleswig-Holstein' },
+  { kuerzel: 'SL', name: 'Saarland' },
+  { kuerzel: 'SN', name: 'Sachsen' },
+  { kuerzel: 'ST', name: 'Sachsen-Anhalt' },
+  { kuerzel: 'TH', name: 'Thüringen' },
+]
+
 export default function SchulenImportPage() {
   const { user } = useAuthStore()
   const { rolle, loading } = useRole()
@@ -10,6 +29,7 @@ export default function SchulenImportPage() {
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [stats, setStats] = useState({ imported: 0, errors: 0 })
+  const [progress, setProgress] = useState({ completed: [], active: null })
   const logRef = useRef(null)
 
   const addLog = (msg) => {
@@ -32,11 +52,14 @@ export default function SchulenImportPage() {
   const isAllowed = rolle === 'admin' || username === 'dfoerster'
   if (!isAllowed) return <Navigate to="/dashboard" />
 
+  const aktiveBL = ALLE_BL.filter(bl => bl.aktiv)
+
   const startImport = async () => {
     setRunning(true)
     setDone(false)
     setLog([])
     setStats({ imported: 0, errors: 0 })
+    setProgress({ completed: [], active: 'BY' })
     addLog('🚀 Starte Import über Server-API ...')
 
     try {
@@ -54,12 +77,12 @@ export default function SchulenImportPage() {
 
       const data = await res.json()
 
-      // Alle Log-Einträge vom Server anzeigen
       if (Array.isArray(data.logs)) {
         data.logs.forEach(line => addLog(line))
       }
 
       setStats({ imported: data.totalImported || 0, errors: data.totalErrors || 0 })
+      setProgress({ completed: aktiveBL.map(bl => bl.kuerzel), active: null })
     } catch (e) {
       addLog(`❌ Netzwerk-Fehler: ${e.message}`)
     }
@@ -84,17 +107,82 @@ export default function SchulenImportPage() {
       <div className="main-content">
         <div className="welcome-banner">
           <h2>🏫 Schulen-Import</h2>
-          <p>
-            Importiert alle deutschen Schulen aus <strong>jedeschule.codefor.de</strong> in die Datenbank.
-            Der Import läuft sicher über den Server – kein direkter Datenbankzugriff aus dem Browser.
+          <p style={{ marginBottom: 4 }}>
+            Datenabgleich via <strong>jedeschule.codefor.de</strong> API
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Alle Schulen werden von der jedeschule.codefor.de API geladen und per UPSERT in Supabase gespeichert.
+            Bestehende Schulen werden aktualisiert, neue hinzugefügt – keine Daten gehen verloren.
           </p>
         </div>
 
+        {/* Bundesländer-Übersicht */}
         <div className="card" style={{ marginBottom: 24 }}>
-          <p style={{ marginBottom: 16, color: 'var(--text-muted)', fontSize: 14 }}>
-            Alle 16 Bundesländer werden abgerufen und per Upsert in die Tabelle <code>schulen</code> geschrieben.
-            Dies kann einige Minuten dauern. Bitte das Fenster nicht schließen.
+          <p className="section-title" style={{ marginBottom: 12 }}>
+            {aktiveBL.length}/16 Bundesländer aktiv
           </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8, marginBottom: 16 }}>
+            {ALLE_BL.map(bl => {
+              const isDone = progress.completed.includes(bl.kuerzel)
+              const isActive = progress.active === bl.kuerzel
+              const isEnabled = bl.aktiv
+
+              return (
+                <div
+                  key={bl.kuerzel}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    background: isActive ? 'var(--primary-light, #e8f4f5)' : 'transparent',
+                    opacity: isEnabled ? 1 : 0.35,
+                    filter: isEnabled ? 'none' : 'grayscale(1)',
+                  }}
+                >
+                  <span style={{
+                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                    background: isDone ? '#437a22' : isActive ? '#01696f' : isEnabled ? '#01696f' : '#bab9b4',
+                    boxShadow: isActive ? '0 0 0 3px rgba(1,105,111,0.2)' : 'none',
+                    animation: isActive ? 'pulse 1s ease-in-out infinite' : 'none',
+                  }} />
+                  <span style={{
+                    fontSize: 13,
+                    color: isEnabled ? 'var(--text)' : 'var(--text-muted)',
+                    fontWeight: isActive ? 600 : 400,
+                  }}>
+                    {bl.name}
+                    {!isEnabled && <span style={{ fontSize: 11, marginLeft: 4 }}>(demnächst)</span>}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          <style>{`
+            @keyframes pulse {
+              0%, 100% { transform: scale(1); opacity: 1; }
+              50% { transform: scale(1.3); opacity: 0.7; }
+            }
+          `}</style>
+
+          {/* Statistik-Kacheln */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+            <div style={{ textAlign: 'center', padding: '12px 8px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary, #01696f)' }}>{stats.imported > 0 ? stats.imported.toLocaleString('de-DE') : '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Schulen in DB</div>
+            </div>
+            <div style={{ textAlign: 'center', padding: '12px 8px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: stats.errors > 0 ? '#a12c7b' : 'var(--text-muted)' }}>{stats.errors > 0 ? stats.errors : '0'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Fehler</div>
+            </div>
+            <div style={{ textAlign: 'center', padding: '12px 8px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)' }}>{done ? new Date().toLocaleDateString('de-DE') : '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Letzter Import</div>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <button
@@ -105,12 +193,8 @@ export default function SchulenImportPage() {
             >
               {running ? '⏳ Import läuft...' : '▶️ Import starten'}
             </button>
-
-            {(running || done) && (
-              <div style={{ display: 'flex', gap: 16, fontSize: 14 }}>
-                <span style={{ color: 'var(--success, #437a22)' }}>✅ {stats.imported.toLocaleString('de-DE')} importiert</span>
-                {stats.errors > 0 && <span style={{ color: 'var(--error, #a12c7b)' }}>⚠️ {stats.errors} Fehler</span>}
-              </div>
+            {done && stats.errors === 0 && (
+              <span style={{ fontSize: 13, color: '#437a22' }}>✅ Import erfolgreich abgeschlossen</span>
             )}
           </div>
         </div>
@@ -121,7 +205,8 @@ export default function SchulenImportPage() {
             <pre
               ref={logRef}
               style={{
-                background: 'var(--bg)',
+                background: '#0d1117',
+                color: '#e6edf3',
                 border: '1px solid var(--border)',
                 borderRadius: 8,
                 padding: 16,
