@@ -2,11 +2,11 @@ import { useForm } from 'react-hook-form'
 import { supabase } from '../lib/supabase.js'
 import { useNavigate, Link } from 'react-router-dom'
 
-// Supabase Auth requires a valid email format. Since students may not have
-// email addresses, we generate a fake one using a real TLD (.de) that
-// Supabase accepts. Passwords can be reset by an admin if needed.
+// @example.com is reserved by RFC 2606 for documentation/testing.
+// No mail server exists for it — emails are never delivered.
+// Supabase accepts it as a valid email format.
 const toFakeEmail = (benutzername) =>
-  `${benutzername.trim().toLowerCase()}@vokabelapp.de`
+  `${benutzername.trim().toLowerCase()}@example.com`
 
 export default function RegisterPage() {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm()

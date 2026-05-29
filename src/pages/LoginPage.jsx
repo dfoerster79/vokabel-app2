@@ -6,7 +6,7 @@ import { useNavigate, Link } from 'react-router-dom'
 
 // Must match the fake email domain used in RegisterPage
 const toFakeEmail = (benutzername) =>
-  `${benutzername.trim().toLowerCase()}@vokabelapp.de`
+  `${benutzername.trim().toLowerCase()}@example.com`
 
 export default function LoginPage() {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
