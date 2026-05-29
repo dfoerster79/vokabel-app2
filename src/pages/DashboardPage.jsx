@@ -35,6 +35,8 @@ export default function DashboardPage() {
 
   const config = rolleConfig[rolle] || rolleConfig.schueler
   const vorname = profile?.vorname || user?.user_metadata?.vorname || user?.email?.split('@')[0] || 'Willkommen'
+  const username = user?.user_metadata?.username || user?.email?.split('@')[0]
+  const showAdminLink = rolle === 'admin' || username === 'dfoerster'
 
   if (loading) return (
     <div className="page-center">
@@ -53,6 +55,11 @@ export default function DashboardPage() {
           VokabelApp
         </Link>
         <div className="nav-actions">
+          {showAdminLink && (
+            <Link to="/admin" className="nav-btn" style={{ background: 'var(--primary)', color: '#fff', borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 13 }}>
+              ⚙️ Admin
+            </Link>
+          )}
           <span className={`badge ${config.badgeClass}`}>{config.label}</span>
           <button className="nav-btn" onClick={logout}>Abmelden</button>
         </div>
