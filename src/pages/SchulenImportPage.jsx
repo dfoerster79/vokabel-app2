@@ -3,23 +3,25 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
 
+// aktiv: true  → wird importiert und normal angezeigt
+// aktiv: false → ausgegraut, kein Import
 const ALLE_BL = [
-  { kuerzel: 'BB', name: 'Brandenburg' },
-  { kuerzel: 'BE', name: 'Berlin' },
-  { kuerzel: 'BW', name: 'Baden-Württemberg' },
-  { kuerzel: 'BY', name: 'Bayern', aktiv: true },
-  { kuerzel: 'HB', name: 'Bremen' },
-  { kuerzel: 'HE', name: 'Hessen' },
-  { kuerzel: 'HH', name: 'Hamburg' },
-  { kuerzel: 'MV', name: 'Mecklenburg-Vorpommern' },
-  { kuerzel: 'NI', name: 'Niedersachsen' },
-  { kuerzel: 'NW', name: 'Nordrhein-Westfalen' },
-  { kuerzel: 'RP', name: 'Rheinland-Pfalz' },
-  { kuerzel: 'SH', name: 'Schleswig-Holstein' },
-  { kuerzel: 'SL', name: 'Saarland' },
-  { kuerzel: 'SN', name: 'Sachsen' },
-  { kuerzel: 'ST', name: 'Sachsen-Anhalt' },
-  { kuerzel: 'TH', name: 'Thüringen' },
+  { kuerzel: 'BB', name: 'Brandenburg',             aktiv: false },
+  { kuerzel: 'BE', name: 'Berlin',                  aktiv: false },
+  { kuerzel: 'BW', name: 'Baden-Württemberg',       aktiv: false },
+  { kuerzel: 'BY', name: 'Bayern',                  aktiv: true  },
+  { kuerzel: 'HB', name: 'Bremen',                  aktiv: false },
+  { kuerzel: 'HE', name: 'Hessen',                  aktiv: false },
+  { kuerzel: 'HH', name: 'Hamburg',                 aktiv: false },
+  { kuerzel: 'MV', name: 'Mecklenburg-Vorpommern',  aktiv: false },
+  { kuerzel: 'NI', name: 'Niedersachsen',           aktiv: false },
+  { kuerzel: 'NW', name: 'Nordrhein-Westfalen',     aktiv: false },
+  { kuerzel: 'RP', name: 'Rheinland-Pfalz',         aktiv: false },
+  { kuerzel: 'SH', name: 'Schleswig-Holstein',      aktiv: false },
+  { kuerzel: 'SL', name: 'Saarland',                aktiv: false },
+  { kuerzel: 'SN', name: 'Sachsen',                 aktiv: false },
+  { kuerzel: 'ST', name: 'Sachsen-Anhalt',          aktiv: false },
+  { kuerzel: 'TH', name: 'Thüringen',               aktiv: false },
 ]
 
 export default function SchulenImportPage() {
@@ -111,8 +113,7 @@ export default function SchulenImportPage() {
             Datenabgleich via <strong>jedeschule.codefor.de</strong> API
           </p>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Alle Schulen werden von der jedeschule.codefor.de API geladen und per UPSERT in Supabase gespeichert.
-            Bestehende Schulen werden aktualisiert, neue hinzugefügt – keine Daten gehen verloren.
+            Aktiv importiert wird derzeit nur <strong>Bayern</strong>. Weitere Bundesländer folgen schrittweise.
           </p>
         </div>
 
@@ -154,7 +155,7 @@ export default function SchulenImportPage() {
                     fontWeight: isActive ? 600 : 400,
                   }}>
                     {bl.name}
-                    {!isEnabled && <span style={{ fontSize: 11, marginLeft: 4 }}>(demnächst)</span>}
+                    {!isEnabled && <span style={{ fontSize: 11, marginLeft: 4, color: 'var(--text-muted)' }}>(demnächst)</span>}
                   </span>
                 </div>
               )
@@ -191,10 +192,13 @@ export default function SchulenImportPage() {
               disabled={running}
               style={{ minWidth: 180 }}
             >
-              {running ? '⏳ Import läuft...' : '▶️ Import starten'}
+              {running ? '⏳ Import läuft...' : '▶️ Bayern importieren'}
             </button>
             {done && stats.errors === 0 && (
               <span style={{ fontSize: 13, color: '#437a22' }}>✅ Import erfolgreich abgeschlossen</span>
+            )}
+            {done && stats.errors > 0 && (
+              <span style={{ fontSize: 13, color: '#a12c7b' }}>⚠️ Import mit {stats.errors} Fehlern abgeschlossen</span>
             )}
           </div>
         </div>

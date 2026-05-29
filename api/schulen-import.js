@@ -5,10 +5,9 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = (process.env.VITE_SUPABASE_URL || '').replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '').replace(/\/$/, '')
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
 
-// Aktuell aktiv: nur Bayern zum Testen
+// Aktuell aktiv: nur Bayern
 const BUNDESLAENDER_AKTIV = ['BY']
 
-// Alle 16 BL fuer die Anzeige
 const BL_NAMEN = {
   BB:'Brandenburg', BE:'Berlin', BW:'Baden-Württemberg', BY:'Bayern',
   HB:'Bremen', HE:'Hessen', HH:'Hamburg', MV:'Mecklenburg-Vorpommern',
@@ -47,9 +46,9 @@ export default async function handler(req, res) {
   const addLog = (msg) => logs.push(msg)
   let totalImported = 0
   let totalErrors = 0
-  const BATCH = 200
+  const BATCH = 100  // Kleinere Batches = weniger Timeout-Risiko
 
-  addLog('🚀 Starte API-Abgleich von jedeschule.codefor.de …')
+  addLog('🚀 Starte Import über Server-API …')
   addLog(`ℹ️ Aktiver Import: ${BUNDESLAENDER_AKTIV.map(k => BL_NAMEN[k]).join(', ')}`)
 
   for (const kuerzel of BUNDESLAENDER_AKTIV) {
@@ -91,15 +90,21 @@ export default async function handler(req, res) {
         longitude:    s.longitude || null,
       }))
 
-      const { error } = await supabase
-        .from('schulen')
-        .upsert(batch, { onConflict: 'id' })
+      try {
+        const { error, status } = await supabase
+          .from('schulen')
+          .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
 
-      if (error) {
-        addLog(`${kuerzel}: Upsert-Fehler: ${error.message}`)
+        // Supabase gibt bei Erfolg 204 zurück (kein JSON-Body) – das ist kein Fehler
+        if (error) {
+          addLog(`${kuerzel}: Upsert-Fehler (Batch ${Math.floor(i/BATCH)+1}): ${error.message}`)
+          blErrors++
+        } else {
+          blImported += batch.length
+        }
+      } catch (e) {
+        addLog(`${kuerzel}: Upsert-Exception (Batch ${Math.floor(i/BATCH)+1}): ${e.message}`)
         blErrors++
-      } else {
-        blImported += batch.length
       }
     }
 
