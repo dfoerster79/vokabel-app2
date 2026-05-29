@@ -11,10 +11,14 @@ export default function LoginPage() {
   const setUser = useAuthStore(s => s.setUser)
   const navigate = useNavigate()
 
-  const onSubmit = async ({ email, password }) => {
+  const onSubmit = async ({ benutzername, password }) => {
     setServerError('')
+    const email = `${benutzername.trim().toLowerCase()}@vokabelapp.local`
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { setServerError(error.message); return }
+    if (error) {
+      setServerError('Benutzername oder Passwort falsch.')
+      return
+    }
     setUser(data.user)
     navigate('/dashboard')
   }
@@ -30,20 +34,24 @@ export default function LoginPage() {
         <div className="card">
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Willkommen 👋</h1>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Melde dich an, um loszulegen.</p>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Melde dich mit deinem Benutzernamen an.</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="form-group">
-              <label className="form-label">E-Mail</label>
+              <label className="form-label">Benutzername</label>
               <input
-                className={`form-input ${errors.email ? 'error' : ''}`}
-                {...register('email', { required: 'Pflichtfeld' })}
-                type="email"
+                className={`form-input ${errors.benutzername ? 'error' : ''}`}
+                {...register('benutzername', {
+                  required: 'Pflichtfeld',
+                  pattern: { value: /^[a-zA-Z0-9._-]+$/, message: 'Nur Buchstaben, Zahlen, . _ - erlaubt' }
+                })}
+                type="text"
                 autoComplete="username"
-                placeholder="name@schule.de"
+                placeholder="z.B. max.mustermann"
+                autoCapitalize="none"
               />
-              {errors.email && <span className="form-error">{errors.email.message}</span>}
+              {errors.benutzername && <span className="form-error">{errors.benutzername.message}</span>}
             </div>
 
             <div className="form-group">

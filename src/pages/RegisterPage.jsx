@@ -7,26 +7,41 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const password = watch('password')
 
-  const onSubmit = async ({ email, password, vorname, nachname }) => {
-    // 1. Supabase Auth Account anlegen
+  const onSubmit = async ({ benutzername, password, vorname, nachname }) => {
+    const email = `${benutzername.trim().toLowerCase()}@vokabelapp.local`
+
+    // 1. Prüfen ob Benutzername bereits vergeben
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('benutzername', benutzername.trim().toLowerCase())
+      .maybeSingle()
+
+    if (existing) {
+      alert('Dieser Benutzername ist bereits vergeben. Bitte wähle einen anderen.')
+      return
+    }
+
+    // 2. Supabase Auth Account anlegen
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { vorname, nachname } }
+      options: { data: { vorname, nachname, benutzername: benutzername.trim().toLowerCase() } }
     })
     if (error) { alert(error.message); return }
 
-    // 2. Profil in profiles-Tabelle anlegen (Rolle = 'schueler' als Standard)
+    // 3. Profil anlegen
     if (data.user) {
       await supabase.from('profiles').upsert({
         id: data.user.id,
         vorname,
         nachname,
+        benutzername: benutzername.trim().toLowerCase(),
         rolle: 'schueler'
       })
     }
 
-    alert('Registrierung erfolgreich – bitte E-Mail bestätigen.')
+    alert('Registrierung erfolgreich! Du kannst dich jetzt anmelden.')
     navigate('/')
   }
 
@@ -41,10 +56,29 @@ export default function RegisterPage() {
         <div className="card">
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Konto erstellen</h1>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Neue Accounts erhalten automatisch die Rolle <strong>Schüler</strong>. Lehrer- und Admin-Rechte werden vom Administrator vergeben.</p>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Neue Accounts erhalten automatisch die Rolle <strong>Schüler</strong>. Lehrer-Rechte werden vom Administrator vergeben.</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            <div className="form-group">
+              <label className="form-label">Benutzername</label>
+              <input
+                className={`form-input ${errors.benutzername ? 'error' : ''}`}
+                {...register('benutzername', {
+                  required: 'Pflichtfeld',
+                  minLength: { value: 3, message: 'Mind. 3 Zeichen' },
+                  pattern: { value: /^[a-zA-Z0-9._-]+$/, message: 'Nur Buchstaben, Zahlen, . _ - erlaubt' }
+                })}
+                type="text"
+                autoComplete="username"
+                placeholder="z.B. max.mustermann"
+                autoCapitalize="none"
+              />
+              {errors.benutzername && <span className="form-error">{errors.benutzername.message}</span>}
+              <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Erlaubt: Buchstaben, Zahlen, Punkt, Unterstrich, Bindestrich</span>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-group">
                 <label className="form-label">Vorname</label>
@@ -59,20 +93,29 @@ export default function RegisterPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">E-Mail</label>
-              <input className={`form-input ${errors.email ? 'error' : ''}`} {...register('email', { required: 'Pflichtfeld' })} type="email" autoComplete="username" placeholder="name@schule.de" />
-              {errors.email && <span className="form-error">{errors.email.message}</span>}
-            </div>
-
-            <div className="form-group">
               <label className="form-label">Passwort</label>
-              <input className={`form-input ${errors.password ? 'error' : ''}`} {...register('password', { required: 'Pflichtfeld', minLength: { value: 6, message: 'Mind. 6 Zeichen' } })} type="password" autoComplete="new-password" placeholder="••••••••" />
+              <input
+                className={`form-input ${errors.password ? 'error' : ''}`}
+                {...register('password', { required: 'Pflichtfeld', minLength: { value: 6, message: 'Mind. 6 Zeichen' } })}
+                type="password"
+                autoComplete="new-password"
+                placeholder="••••••••"
+              />
               {errors.password && <span className="form-error">{errors.password.message}</span>}
             </div>
 
             <div className="form-group">
               <label className="form-label">Passwort wiederholen</label>
-              <input className={`form-input ${errors.password2 ? 'error' : ''}`} {...register('password2', { required: 'Pflichtfeld', validate: v => v === password || 'Passwörter stimmen nicht überein' })} type="password" autoComplete="new-password" placeholder="••••••••" />
+              <input
+                className={`form-input ${errors.password2 ? 'error' : ''}`}
+                {...register('password2', {
+                  required: 'Pflichtfeld',
+                  validate: v => v === password || 'Passwörter stimmen nicht überein'
+                })}
+                type="password"
+                autoComplete="new-password"
+                placeholder="••••••••"
+              />
               {errors.password2 && <span className="form-error">{errors.password2.message}</span>}
             </div>
 

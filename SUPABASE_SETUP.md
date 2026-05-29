@@ -3,9 +3,10 @@
 Führe dieses SQL einmalig im Supabase SQL Editor aus:
 
 ```sql
--- Profiltabelle mit Rollenverwaltung
+-- Profiltabelle mit Rollenverwaltung + Benutzername
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
+  benutzername text unique,
   vorname text,
   nachname text,
   rolle text not null default 'schueler' check (rolle in ('schueler', 'lehrer', 'admin')),
@@ -25,12 +26,20 @@ create policy "Eigenes Profil anlegen"
   on public.profiles for insert
   with check (auth.uid() = id);
 
--- Rolle nur durch Admin änderbar (via Supabase Dashboard oder Service Role Key)
--- Normaler Nutzer kann seine Rolle NICHT selbst ändern
+-- Profil aktualisieren, aber Rolle NICHT selbst ändern
 create policy "Profil aktualisieren"
   on public.profiles for update
   using (auth.uid() = id)
   with check (rolle = (select rolle from public.profiles where id = auth.uid()));
+```
+
+## Benutzername-Spalte nachträglich hinzufügen
+
+Falls die Tabelle bereits ohne `benutzername` angelegt wurde:
+
+```sql
+alter table public.profiles
+  add column if not exists benutzername text unique;
 ```
 
 ## Rolle eines Nutzers ändern (Admin-Aufgabe)
