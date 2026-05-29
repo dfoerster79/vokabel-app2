@@ -1,14 +1,15 @@
 import { useForm } from 'react-hook-form'
 import { supabase } from '../lib/supabase.js'
 import { useNavigate, Link } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore.js'
 
 export default function RegisterPage() {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm()
   const navigate = useNavigate()
+  const setUser = useAuthStore(s => s.setUser)
   const password = watch('password')
 
   const onSubmit = async ({ benutzername, password, vorname, nachname }) => {
-    // Registrierung über Edge Function — kein E-Mail-Versand, sofort bestätigt
     const { data, error } = await supabase.functions.invoke('create-user', {
       body: { benutzername, password, vorname, nachname }
     })
@@ -18,8 +19,22 @@ export default function RegisterPage() {
       return
     }
 
-    alert('Registrierung erfolgreich! Du kannst dich jetzt anmelden.')
-    navigate('/')
+    // Nach erfolgreicher Registrierung direkt einloggen
+    const fakeEmail = `${benutzername}@vokabelapp.local`
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+      email: fakeEmail,
+      password
+    })
+
+    if (loginError || !loginData?.user) {
+      // Fallback: zur Login-Seite, wenn auto-login fehlschlägt
+      alert('Registrierung erfolgreich! Bitte melde dich jetzt an.')
+      navigate('/')
+      return
+    }
+
+    setUser(loginData.user)
+    navigate('/profil-einrichten')
   }
 
   return (
