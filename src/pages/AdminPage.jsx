@@ -11,6 +11,13 @@ const adminTools = [
     to: '/admin/schulen-import',
     badge: 'Datenimport',
   },
+  {
+    icon: '🗺️',
+    label: 'Orte-Import',
+    desc: 'Orte mit PLZ und Bundesland-Zuordnung importieren',
+    to: '/admin/orte-import',
+    badge: 'Datenimport',
+  },
 ]
 
 export default function AdminPage() {
@@ -26,7 +33,6 @@ export default function AdminPage() {
     </div>
   )
 
-  // Nur für admin-Rolle oder Nutzer "dfoerster"
   const username = user?.user_metadata?.username || user?.email?.split('@')[0]
   const isAllowed = rolle === 'admin' || username === 'dfoerster'
   if (!isAllowed) return <Navigate to="/dashboard" />

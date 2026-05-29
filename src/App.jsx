@@ -5,6 +5,7 @@ import ProfileSetupPage from './pages/ProfileSetupPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
 import SchulenImportPage from './pages/SchulenImportPage.jsx'
+import OrteImportPage from './pages/OrteImportPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 import { useAuthStore } from './store/authStore.js'
 
@@ -18,6 +19,7 @@ export default function App() {
       <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/" />} />
       <Route path="/admin" element={user ? <AdminPage /> : <Navigate to="/" />} />
       <Route path="/admin/schulen-import" element={user ? <SchulenImportPage /> : <Navigate to="/" />} />
+      <Route path="/admin/orte-import" element={user ? <OrteImportPage /> : <Navigate to="/" />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
