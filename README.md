@@ -2,14 +2,6 @@
 
 KI-gestützte Vokabel-App als PWA – React + Vite + Supabase
 
-## Lokale Entwicklung
-
-```bash
-npm install
-cp .env.example .env.local   # Supabase-Keys eintragen
-npm run dev
-```
-
 ## Deployment
 
 Das Projekt wird über **Vercel** deployed (Projekt `vokabel-app2`).
@@ -30,3 +22,13 @@ Erforderliche Umgebungsvariablen in Vercel:
 | Forms | react-hook-form |
 | Icons | lucide-react |
 | KI | openai |
+
+## Modulstruktur
+
+- Authentifizierung & Registrierung
+- Fachspezifische Kurs-Zuordnung
+- Vokabelset-Verwaltung
+- Lern- & Testmodul
+- KI-Modul (OpenAI)
+- Schuljahreswechsel-Logik
+- PWA (offline-fähig, iOS & Android)
