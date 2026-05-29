@@ -5,8 +5,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = (process.env.VITE_SUPABASE_URL || '').replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '').replace(/\/$/, '')
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
 
-// Aktuell aktiv: nur Bayern
-const BUNDESLAENDER_AKTIV = ['BY']
+// Alle 16 Bundesländer aktiv
+const BUNDESLAENDER_AKTIV = ['BB','BE','BW','BY','HB','HE','HH','MV','NI','NW','RP','SH','SL','SN','ST','TH']
 
 const BL_NAMEN = {
   BB:'Brandenburg', BE:'Berlin', BW:'Baden-Württemberg', BY:'Bayern',
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   const BATCH = 100
 
   addLog('🚀 Starte Import über Server-API …')
-  addLog(`ℹ️ Aktiver Import: ${BUNDESLAENDER_AKTIV.map(k => BL_NAMEN[k]).join(', ')}`)
+  addLog(`ℹ️ Aktiver Import: alle 16 Bundesländer`)
 
   for (const kuerzel of BUNDESLAENDER_AKTIV) {
     const name = BL_NAMEN[kuerzel]
@@ -73,8 +73,6 @@ export default async function handler(req, res) {
     let blErrors = 0
 
     for (let i = 0; i < unique.length; i += BATCH) {
-      // Nur Spalten mappen, die in der schulen-Tabelle existieren:
-      // id, name, ort, bundesland, adresse, schulart
       const batch = unique.slice(i, i + BATCH).map(s => ({
         id:         s.id,
         name:       s.name || null,

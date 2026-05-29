@@ -3,25 +3,23 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
 
-// aktiv: true  → wird importiert und normal angezeigt
-// aktiv: false → ausgegraut, kein Import
 const ALLE_BL = [
-  { kuerzel: 'BB', name: 'Brandenburg',             aktiv: false },
-  { kuerzel: 'BE', name: 'Berlin',                  aktiv: false },
-  { kuerzel: 'BW', name: 'Baden-Württemberg',       aktiv: false },
-  { kuerzel: 'BY', name: 'Bayern',                  aktiv: true  },
-  { kuerzel: 'HB', name: 'Bremen',                  aktiv: false },
-  { kuerzel: 'HE', name: 'Hessen',                  aktiv: false },
-  { kuerzel: 'HH', name: 'Hamburg',                 aktiv: false },
-  { kuerzel: 'MV', name: 'Mecklenburg-Vorpommern',  aktiv: false },
-  { kuerzel: 'NI', name: 'Niedersachsen',           aktiv: false },
-  { kuerzel: 'NW', name: 'Nordrhein-Westfalen',     aktiv: false },
-  { kuerzel: 'RP', name: 'Rheinland-Pfalz',         aktiv: false },
-  { kuerzel: 'SH', name: 'Schleswig-Holstein',      aktiv: false },
-  { kuerzel: 'SL', name: 'Saarland',                aktiv: false },
-  { kuerzel: 'SN', name: 'Sachsen',                 aktiv: false },
-  { kuerzel: 'ST', name: 'Sachsen-Anhalt',          aktiv: false },
-  { kuerzel: 'TH', name: 'Thüringen',               aktiv: false },
+  { kuerzel: 'BB', name: 'Brandenburg',             aktiv: true },
+  { kuerzel: 'BE', name: 'Berlin',                  aktiv: true },
+  { kuerzel: 'BW', name: 'Baden-Württemberg',       aktiv: true },
+  { kuerzel: 'BY', name: 'Bayern',                  aktiv: true },
+  { kuerzel: 'HB', name: 'Bremen',                  aktiv: true },
+  { kuerzel: 'HE', name: 'Hessen',                  aktiv: true },
+  { kuerzel: 'HH', name: 'Hamburg',                 aktiv: true },
+  { kuerzel: 'MV', name: 'Mecklenburg-Vorpommern',  aktiv: true },
+  { kuerzel: 'NI', name: 'Niedersachsen',           aktiv: true },
+  { kuerzel: 'NW', name: 'Nordrhein-Westfalen',     aktiv: true },
+  { kuerzel: 'RP', name: 'Rheinland-Pfalz',         aktiv: true },
+  { kuerzel: 'SH', name: 'Schleswig-Holstein',      aktiv: true },
+  { kuerzel: 'SL', name: 'Saarland',                aktiv: true },
+  { kuerzel: 'SN', name: 'Sachsen',                 aktiv: true },
+  { kuerzel: 'ST', name: 'Sachsen-Anhalt',          aktiv: true },
+  { kuerzel: 'TH', name: 'Thüringen',               aktiv: true },
 ]
 
 export default function SchulenImportPage() {
@@ -61,7 +59,7 @@ export default function SchulenImportPage() {
     setDone(false)
     setLog([])
     setStats({ imported: 0, errors: 0 })
-    setProgress({ completed: [], active: 'BY' })
+    setProgress({ completed: [], active: null })
     addLog('🚀 Starte Import über Server-API ...')
 
     try {
@@ -113,7 +111,7 @@ export default function SchulenImportPage() {
             Datenabgleich via <strong>jedeschule.codefor.de</strong> API
           </p>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Aktiv importiert wird derzeit nur <strong>Bayern</strong>. Weitere Bundesländer folgen schrittweise.
+            Alle 16 Bundesländer werden importiert. Bestehende Schulen werden aktualisiert, neue hinzugefügt.
           </p>
         </div>
 
@@ -127,7 +125,6 @@ export default function SchulenImportPage() {
             {ALLE_BL.map(bl => {
               const isDone = progress.completed.includes(bl.kuerzel)
               const isActive = progress.active === bl.kuerzel
-              const isEnabled = bl.aktiv
 
               return (
                 <div
@@ -139,23 +136,20 @@ export default function SchulenImportPage() {
                     padding: '6px 10px',
                     borderRadius: 6,
                     background: isActive ? 'var(--primary-light, #e8f4f5)' : 'transparent',
-                    opacity: isEnabled ? 1 : 0.35,
-                    filter: isEnabled ? 'none' : 'grayscale(1)',
                   }}
                 >
                   <span style={{
                     width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                    background: isDone ? '#437a22' : isActive ? '#01696f' : isEnabled ? '#01696f' : '#bab9b4',
+                    background: isDone ? '#437a22' : isActive ? '#01696f' : '#01696f',
                     boxShadow: isActive ? '0 0 0 3px rgba(1,105,111,0.2)' : 'none',
                     animation: isActive ? 'pulse 1s ease-in-out infinite' : 'none',
                   }} />
                   <span style={{
                     fontSize: 13,
-                    color: isEnabled ? 'var(--text)' : 'var(--text-muted)',
+                    color: 'var(--text)',
                     fontWeight: isActive ? 600 : 400,
                   }}>
                     {bl.name}
-                    {!isEnabled && <span style={{ fontSize: 11, marginLeft: 4, color: 'var(--text-muted)' }}>(demnächst)</span>}
                   </span>
                 </div>
               )
@@ -192,7 +186,7 @@ export default function SchulenImportPage() {
               disabled={running}
               style={{ minWidth: 180 }}
             >
-              {running ? '⏳ Import läuft...' : '▶️ Bayern importieren'}
+              {running ? '⏳ Import läuft...' : '▶️ Alle Bundesländer importieren'}
             </button>
             {done && stats.errors === 0 && (
               <span style={{ fontSize: 13, color: '#437a22' }}>✅ Import erfolgreich abgeschlossen</span>
