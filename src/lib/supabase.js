@@ -1,26 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Vercel's Supabase integration sets SUPABASE_URL / SUPABASE_ANON_KEY (without VITE_ prefix).
-// Vite only exposes VITE_-prefixed vars to the browser, so we fall back to the non-prefixed
-// versions as well, which are injected by Vercel at build time via its integration.
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ||
-  import.meta.env.VITE_SUPABASE_PROJECT_URL ||
-  import.meta.env.SUPABASE_URL
+// Supabase URL – gesetzt in Vercel als VITE_SUPABASE_URL
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  import.meta.env.VITE_SUPABASE_ANON_PUBLIC_KEY ||
-  import.meta.env.SUPABASE_ANON_KEY
+// Publishable Key (ersetzt den alten anon-Key) – sicher fuer den Browser
+const supabasePublishableKey =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY // Fallback fuer alte Deployments
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error(
-    'Supabase environment variables are not set. ' +
-    'Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.'
+    'Supabase Umgebungsvariablen fehlen. ' +
+    'Bitte VITE_SUPABASE_URL und VITE_SUPABASE_PUBLISHABLE_KEY in Vercel setzen.'
   )
 }
 
-// Strip any trailing path segments (e.g. /rest/v1) that Vercel's integration may append
+// Trailing Pfade entfernen (Vercel-Integration haengt manchmal /rest/v1 an)
 const cleanUrl = supabaseUrl.replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '')
 
-export const supabase = createClient(cleanUrl, supabaseAnonKey)
+export const supabase = createClient(cleanUrl, supabasePublishableKey)
