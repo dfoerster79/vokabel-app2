@@ -46,7 +46,7 @@ export default async function handler(req, res) {
   const addLog = (msg) => logs.push(msg)
   let totalImported = 0
   let totalErrors = 0
-  const BATCH = 100  // Kleinere Batches = weniger Timeout-Risiko
+  const BATCH = 100
 
   addLog('🚀 Starte Import über Server-API …')
   addLog(`ℹ️ Aktiver Import: ${BUNDESLAENDER_AKTIV.map(k => BL_NAMEN[k]).join(', ')}`)
@@ -73,29 +73,22 @@ export default async function handler(req, res) {
     let blErrors = 0
 
     for (let i = 0; i < unique.length; i += BATCH) {
+      // Nur Spalten mappen, die in der schulen-Tabelle existieren:
+      // id, name, ort, bundesland, adresse, schulart
       const batch = unique.slice(i, i + BATCH).map(s => ({
-        id:           s.id,
-        name:         s.name || null,
-        schulart:     s.school_type || null,
-        bundesland:   kuerzel,
-        ort:          s.city || null,
-        plz:          s.zip || null,
-        strasse:      s.address || null,
-        telefon:      s.phone || null,
-        email:        s.email || null,
-        website:      s.website || null,
-        traeger:      s.provider || null,
-        legal_status: s.legal_status || null,
-        latitude:     s.latitude || null,
-        longitude:    s.longitude || null,
+        id:         s.id,
+        name:       s.name || null,
+        schulart:   s.school_type || null,
+        bundesland: kuerzel,
+        ort:        s.city || null,
+        adresse:    [s.address, s.zip, s.city].filter(Boolean).join(', ') || null,
       }))
 
       try {
-        const { error, status } = await supabase
+        const { error } = await supabase
           .from('schulen')
           .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
 
-        // Supabase gibt bei Erfolg 204 zurück (kein JSON-Body) – das ist kein Fehler
         if (error) {
           addLog(`${kuerzel}: Upsert-Fehler (Batch ${Math.floor(i/BATCH)+1}): ${error.message}`)
           blErrors++
