@@ -16,17 +16,10 @@ const menuLehrer = [
   { icon: '⚙️', label: 'Einstellungen', desc: 'Mein Profil', to: '/profil' },
 ]
 
-const menuAdmin = [
-  { icon: '👤', label: 'Benutzer', desc: 'Nutzer & Rollen', to: '/admin/benutzer' },
-  { icon: '🏫', label: 'Schulen', desc: 'Schulen verwalten', to: '/admin/schulen' },
-  { icon: '📚', label: 'Fächer', desc: 'Fächer & Kurse', to: '/admin/faecher' },
-  { icon: '⚙️', label: 'System', desc: 'App-Einstellungen', to: '/admin/system' },
-]
-
 const rolleConfig = {
   schueler: { label: 'Schüler', badgeClass: 'badge-schueler', menu: menuSchueler, greeting: 'Was möchtest du heute lernen?' },
   lehrer:   { label: 'Lehrer',  badgeClass: 'badge-lehrer',   menu: menuLehrer,   greeting: 'Verwalte deine Kurse und Vokabelsets.' },
-  admin:    { label: 'Admin',   badgeClass: 'badge-admin',    menu: menuAdmin,    greeting: 'Verwalte Benutzer, Schulen und Einstellungen.' },
+  admin:    { label: 'Admin',   badgeClass: 'badge-admin',    menu: menuSchueler, greeting: 'Was möchtest du heute lernen?' },
 }
 
 export default function DashboardPage() {
@@ -57,7 +50,7 @@ export default function DashboardPage() {
         <div className="nav-actions">
           {showAdminLink && (
             <Link to="/admin" className="nav-btn" style={{ background: 'var(--primary)', color: '#fff', borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 13 }}>
-              ⚙️ Admin
+              Admin
             </Link>
           )}
           <span className={`badge ${config.badgeClass}`}>{config.label}</span>
