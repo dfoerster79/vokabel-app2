@@ -1,0 +1,14 @@
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f7f6f2;
+  color: #1a1a1a;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+@media (prefers-color-scheme: dark) {
+  body { background: #121212; color: #e8e8e8; }
+}
