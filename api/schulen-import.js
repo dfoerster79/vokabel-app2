@@ -2,7 +2,8 @@
 // Verwendet SUPABASE_SECRET_KEY (ohne VITE_-Prefix) – umgeht RLS
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL
+// URL direkt verwenden – kein Regex-Trimming noetig, da Secret Key den vollen URL braucht
+const supabaseUrl = (process.env.VITE_SUPABASE_URL || '').replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '').replace(/\/$/, '')
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
 
 const BUNDESLAENDER = [
@@ -43,13 +44,13 @@ export default async function handler(req, res) {
   }
 
   // Admin-Client mit Secret Key – umgeht RLS vollstaendig
-  const supabase = createClient(supabaseUrl.replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, ''), supabaseSecretKey)
+  const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
   const logs = []
   const addLog = (msg) => logs.push(msg)
   let totalImported = 0
   let totalErrors = 0
-  const BATCH = 100
+  const BATCH = 200
 
   addLog('🚀 Starte API-Abgleich von jedeschule.codefor.de …')
 
@@ -64,8 +65,18 @@ export default async function handler(req, res) {
       continue
     }
 
-    for (let i = 0; i < schulen.length; i += BATCH) {
-      const batch = schulen.slice(i, i + BATCH).map(s => ({
+    // Duplikate innerhalb der API-Antwort nach ID entfernen
+    const unique = Array.from(new Map(schulen.map(s => [s.id, s])).values())
+    const dupCount = schulen.length - unique.length
+    if (dupCount > 0) {
+      addLog(`${kuerzel}: ⚠️ ${dupCount} Duplikate aus API-Daten entfernt`)
+    }
+
+    let blImported = 0
+    let blErrors = 0
+
+    for (let i = 0; i < unique.length; i += BATCH) {
+      const batch = unique.slice(i, i + BATCH).map(s => ({
         id:           s.id,
         name:         s.name || null,
         schulart:     s.school_type || null,
@@ -88,13 +99,15 @@ export default async function handler(req, res) {
 
       if (error) {
         addLog(`${kuerzel}: Upsert-Fehler: ${error.message}`)
-        totalErrors += batch.length
+        blErrors++
       } else {
-        totalImported += batch.length
+        blImported += batch.length
       }
     }
 
-    addLog(`✓ ${name}: ${schulen.length.toLocaleString('de-DE')} Schulen`)
+    totalImported += blImported
+    totalErrors += blErrors
+    addLog(`✓ ${name}: ${unique.length.toLocaleString('de-DE')} Schulen`)
   }
 
   addLog(`Abgeschlossen: ${totalImported.toLocaleString('de-DE')} Schulen importiert, ${totalErrors} Fehler.`)
