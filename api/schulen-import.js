@@ -1,20 +1,29 @@
-// Vercel Serverless Function – laeuft serverseitig, niemals im Browser
-// Verwendet SUPABASE_SECRET_KEY (ohne VITE_-Prefix) – umgeht RLS
+// Vercel Serverless Function – Streaming via SSE
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = (process.env.VITE_SUPABASE_URL || '').replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '').replace(/\/$/, '')
+const supabaseUrl = (process.env.VITE_SUPABASE_URL || '')
+  .replace(/\/(rest|auth|storage|realtime)(\/.*)?$/, '')
+  .replace(/\/$/, '')
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
 
-// Alle 16 Bundesländer aktiv
-const BUNDESLAENDER_AKTIV = ['BB','BE','BW','BY','HB','HE','HH','MV','NI','NW','RP','SH','SL','SN','ST','TH']
-
-const BL_NAMEN = {
-  BB:'Brandenburg', BE:'Berlin', BW:'Baden-Württemberg', BY:'Bayern',
-  HB:'Bremen', HE:'Hessen', HH:'Hamburg', MV:'Mecklenburg-Vorpommern',
-  NI:'Niedersachsen', NW:'Nordrhein-Westfalen', RP:'Rheinland-Pfalz',
-  SH:'Schleswig-Holstein', SL:'Saarland', SN:'Sachsen', ST:'Sachsen-Anhalt',
-  TH:'Thüringen'
-}
+const BUNDESLAENDER = [
+  { kuerzel: 'BB', name: 'Brandenburg' },
+  { kuerzel: 'BE', name: 'Berlin' },
+  { kuerzel: 'BW', name: 'Baden-Württemberg' },
+  { kuerzel: 'BY', name: 'Bayern' },
+  { kuerzel: 'HB', name: 'Bremen' },
+  { kuerzel: 'HE', name: 'Hessen' },
+  { kuerzel: 'HH', name: 'Hamburg' },
+  { kuerzel: 'MV', name: 'Mecklenburg-Vorpommern' },
+  { kuerzel: 'NI', name: 'Niedersachsen' },
+  { kuerzel: 'NW', name: 'Nordrhein-Westfalen' },
+  { kuerzel: 'RP', name: 'Rheinland-Pfalz' },
+  { kuerzel: 'SH', name: 'Schleswig-Holstein' },
+  { kuerzel: 'SL', name: 'Saarland' },
+  { kuerzel: 'SN', name: 'Sachsen' },
+  { kuerzel: 'ST', name: 'Sachsen-Anhalt' },
+  { kuerzel: 'TH', name: 'Thüringen' },
+]
 
 async function fetchSchulenForState(kuerzel) {
   let all = [], skip = 0
@@ -22,7 +31,7 @@ async function fetchSchulenForState(kuerzel) {
   while (true) {
     const url = `https://jedeschule.codefor.de/schools/?state=${kuerzel}&limit=${limit}&skip=${skip}`
     const res = await fetch(url)
-    if (!res.ok) throw new Error(`HTTP ${res.status} fuer ${kuerzel}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status} für ${kuerzel}`)
     const items = await res.json()
     all = all.concat(Array.isArray(items) ? items : [])
     if (!Array.isArray(items) || items.length < limit) break
@@ -32,48 +41,58 @@ async function fetchSchulenForState(kuerzel) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' })
-  }
+  if (req.method !== 'POST') return res.status(405).end()
 
   if (!supabaseUrl || !supabaseSecretKey) {
-    return res.status(500).json({ error: 'Supabase-Konfiguration fehlt auf dem Server.' })
+    return res.status(500).json({ error: 'Supabase-Konfiguration fehlt.' })
   }
 
   const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
-  const logs = []
-  const addLog = (msg) => logs.push(msg)
+  // Server-Sent Events Headers
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders()
+
+  const send = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`)
+    if (res.flush) res.flush()
+  }
+
+  const BATCH = 100
   let totalImported = 0
   let totalErrors = 0
-  const BATCH = 100
 
-  addLog('🚀 Starte Import über Server-API …')
-  addLog(`ℹ️ Aktiver Import: alle 16 Bundesländer`)
+  send({ type: 'start', total: BUNDESLAENDER.length })
 
-  for (const kuerzel of BUNDESLAENDER_AKTIV) {
-    const name = BL_NAMEN[kuerzel]
+  for (let i = 0; i < BUNDESLAENDER.length; i++) {
+    const { kuerzel, name } = BUNDESLAENDER[i]
+
+    send({ type: 'state_start', kuerzel, name, index: i })
+
     let schulen = []
     try {
       schulen = await fetchSchulenForState(kuerzel)
     } catch (e) {
-      addLog(`${kuerzel}: ❌ Abruf-Fehler: ${e.message}`)
+      send({ type: 'log', kuerzel, msg: `❌ Abruf-Fehler: ${e.message}` })
+      send({ type: 'state_done', kuerzel, name, imported: 0, errors: 1, index: i })
       totalErrors++
       continue
     }
 
-    // Duplikate innerhalb der API-Antwort nach ID entfernen
     const unique = Array.from(new Map(schulen.map(s => [s.id, s])).values())
     const dupCount = schulen.length - unique.length
     if (dupCount > 0) {
-      addLog(`${kuerzel}: ⚠️ ${dupCount} Duplikate aus API-Daten entfernt`)
+      send({ type: 'log', kuerzel, msg: `⚠️ ${dupCount} Duplikate entfernt` })
     }
 
     let blImported = 0
     let blErrors = 0
 
-    for (let i = 0; i < unique.length; i += BATCH) {
-      const batch = unique.slice(i, i + BATCH).map(s => ({
+    for (let b = 0; b < unique.length; b += BATCH) {
+      const batch = unique.slice(b, b + BATCH).map(s => ({
         id:         s.id,
         name:       s.name || null,
         schulart:   s.school_type || null,
@@ -88,23 +107,29 @@ export default async function handler(req, res) {
           .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
 
         if (error) {
-          addLog(`${kuerzel}: Upsert-Fehler (Batch ${Math.floor(i/BATCH)+1}): ${error.message}`)
           blErrors++
+          send({ type: 'log', kuerzel, msg: `Batch-Fehler: ${error.message}` })
         } else {
           blImported += batch.length
         }
       } catch (e) {
-        addLog(`${kuerzel}: Upsert-Exception (Batch ${Math.floor(i/BATCH)+1}): ${e.message}`)
         blErrors++
       }
     }
 
     totalImported += blImported
     totalErrors += blErrors
-    addLog(`✓ ${name}: ${unique.length.toLocaleString('de-DE')} Schulen (${blImported} importiert, ${blErrors} Fehler)`)
+
+    send({
+      type: 'state_done',
+      kuerzel, name,
+      total: unique.length,
+      imported: blImported,
+      errors: blErrors,
+      index: i,
+    })
   }
 
-  addLog(`Abgeschlossen: ${totalImported.toLocaleString('de-DE')} Schulen importiert, ${totalErrors} Fehler.`)
-
-  return res.status(200).json({ logs, totalImported, totalErrors })
+  send({ type: 'done', totalImported, totalErrors })
+  res.end()
 }
