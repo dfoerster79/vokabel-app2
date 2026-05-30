@@ -48,12 +48,17 @@ export default function DashboardPage() {
           VokabelApp
         </Link>
         <div className="nav-actions">
-          {showAdminLink && (
-            <Link to="/admin" className="nav-btn" style={{ background: 'var(--primary)', color: '#fff', borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 13 }}>
+          {showAdminLink ? (
+            <Link
+              to="/admin"
+              className="badge badge-admin"
+              style={{ textDecoration: 'none', cursor: 'pointer' }}
+            >
               Admin
             </Link>
+          ) : (
+            <span className={`badge ${config.badgeClass}`}>{config.label}</span>
           )}
-          <span className={`badge ${config.badgeClass}`}>{config.label}</span>
           <button className="nav-btn" onClick={logout}>Abmelden</button>
         </div>
       </nav>
