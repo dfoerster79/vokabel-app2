@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
@@ -25,19 +25,42 @@ const BUNDESLAENDER = [
 
 const PAGE_SIZE = 50
 
+// Hilfsfunktion: alle Zeilen einer Supabase-Query ohne 1000er-Limit holen
+async function fetchAll(buildQuery) {
+  const BATCH = 1000
+  let offset = 0
+  let all = []
+  while (true) {
+    const { data, error } = await buildQuery(offset, BATCH)
+    if (error || !data || data.length === 0) break
+    all = all.concat(data)
+    if (data.length < BATCH) break
+    offset += BATCH
+  }
+  return all
+}
+
 export default function SchulenPage() {
   const { user } = useAuthStore()
   const { rolle, loading: roleLoading } = useRole()
 
+  // Filter-Zustände
   const [bundesland, setBundesland] = useState('')
-  const [ort, setOrt] = useState('')
+  const [ortInput, setOrtInput] = useState('')       // was der User tippt
+  const [ortSelected, setOrtSelected] = useState('') // bestätigter Ort
   const [schulart, setSchulart] = useState('')
   const [suche, setSuche] = useState('')
   const [sucheInput, setSucheInput] = useState('')
 
-  const [orte, setOrte] = useState([])
+  // Autocomplete
+  const [ortVorschlaege, setOrtVorschlaege] = useState([])
+  const [showVorschlaege, setShowVorschlaege] = useState(false)
+  const ortRef = useRef(null)
+
+  // Schularten (nur nach Ort-Auswahl)
   const [schularten, setSchularten] = useState([])
 
+  // Ergebnisse
   const [schulen, setSchulen] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -46,41 +69,71 @@ export default function SchulenPage() {
   const username = user?.user_metadata?.username || user?.email?.split('@')[0]
   const isAllowed = rolle === 'admin' || username === 'dfoerster'
 
-  // Orte nachladen wenn Bundesland wechselt
+  // Klick außerhalb schließt Vorschlagsliste
   useEffect(() => {
-    setOrt('')
+    const handler = (e) => {
+      if (ortRef.current && !ortRef.current.contains(e.target)) {
+        setShowVorschlaege(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Wenn Bundesland wechselt: Ort + Schulart zurücksetzen
+  useEffect(() => {
+    setOrtInput('')
+    setOrtSelected('')
     setSchulart('')
-    setOrte([])
     setSchularten([])
-    if (!bundesland) return
-    supabase
-      .from('schulen')
-      .select('ort')
-      .eq('bundesland', bundesland)
-      .not('ort', 'is', null)
-      .order('ort')
-      .then(({ data }) => {
-        const unique = [...new Set((data || []).map(r => r.ort).filter(Boolean))].sort()
-        setOrte(unique)
-      })
+    setOrtVorschlaege([])
   }, [bundesland])
 
-  // Schularten nachladen wenn Bundesland oder Ort wechselt
+  // Ort-Vorschläge laden wenn User tippt (mind. 1 Zeichen, Bundesland gewählt)
+  useEffect(() => {
+    if (!bundesland || ortInput.length < 1) {
+      setOrtVorschlaege([])
+      setShowVorschlaege(false)
+      return
+    }
+    // Wenn der User noch den zuletzt gewählten Ort im Feld hat, keine Vorschläge
+    if (ortInput === ortSelected) return
+
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('schulen')
+        .select('ort')
+        .eq('bundesland', bundesland)
+        .ilike('ort', `%${ortInput}%`)
+        .not('ort', 'is', null)
+        .order('ort')
+        .limit(200)
+      const unique = [...new Set((data || []).map(r => r.ort).filter(Boolean))].sort()
+      setOrtVorschlaege(unique)
+      setShowVorschlaege(unique.length > 0)
+    }, 220)
+    return () => clearTimeout(timer)
+  }, [ortInput, bundesland, ortSelected])
+
+  // Schularten vollständig laden wenn Ort bestätigt wurde
   useEffect(() => {
     setSchulart('')
     setSchularten([])
-    if (!bundesland) return
-    let q = supabase
-      .from('schulen')
-      .select('schulart')
-      .eq('bundesland', bundesland)
-      .not('schulart', 'is', null)
-    if (ort) q = q.eq('ort', ort)
-    q.order('schulart').then(({ data }) => {
-      const unique = [...new Set((data || []).map(r => r.schulart).filter(Boolean))].sort()
+    if (!bundesland || !ortSelected) return
+    fetchAll((offset, limit) =>
+      supabase
+        .from('schulen')
+        .select('schulart')
+        .eq('bundesland', bundesland)
+        .eq('ort', ortSelected)
+        .not('schulart', 'is', null)
+        .order('schulart')
+        .range(offset, offset + limit - 1)
+    ).then(rows => {
+      const unique = [...new Set(rows.map(r => r.schulart).filter(Boolean))].sort()
       setSchularten(unique)
     })
-  }, [bundesland, ort])
+  }, [bundesland, ortSelected])
 
   // Schulen laden
   const loadSchulen = useCallback(async (pg = 0) => {
@@ -92,10 +145,10 @@ export default function SchulenPage() {
       .from('schulen')
       .select('id, name, schulart, ort, bundesland, adresse', { count: 'exact' })
 
-    if (bundesland) q = q.eq('bundesland', bundesland)
-    if (ort)        q = q.eq('ort', ort)
-    if (schulart)   q = q.eq('schulart', schulart)
-    if (suche)      q = q.ilike('name', `%${suche}%`)
+    if (bundesland)   q = q.eq('bundesland', bundesland)
+    if (ortSelected)  q = q.eq('ort', ortSelected)
+    if (schulart)     q = q.eq('schulart', schulart)
+    if (suche)        q = q.ilike('name', `%${suche}%`)
 
     q = q.order('name').range(from, to)
 
@@ -105,12 +158,26 @@ export default function SchulenPage() {
       setTotal(count || 0)
     }
     setDataLoading(false)
-  }, [bundesland, ort, schulart, suche])
+  }, [bundesland, ortSelected, schulart, suche])
 
   useEffect(() => {
     setPage(0)
     loadSchulen(0)
   }, [loadSchulen])
+
+  const handleOrtSelect = (o) => {
+    setOrtInput(o)
+    setOrtSelected(o)
+    setShowVorschlaege(false)
+    setSchulart('')
+  }
+
+  const handleOrtClear = () => {
+    setOrtInput('')
+    setOrtSelected('')
+    setSchulart('')
+    setSchularten([])
+  }
 
   const handlePageChange = (newPage) => {
     setPage(newPage)
@@ -134,7 +201,6 @@ export default function SchulenPage() {
     </div>
   )
 
-  // Zugriffschutz – nur Admin
   if (!isAllowed) return <Navigate to="/dashboard" />
 
   return (
@@ -183,14 +249,16 @@ export default function SchulenPage() {
             )}
           </form>
 
-          {/* Dropdown-Filter */}
+          {/* Dropdown + Ort-Suche + Schulart */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+
+            {/* Bundesland */}
             <div>
               <label style={labelStyle}>Bundesland</label>
               <select
                 className="input"
                 value={bundesland}
-                onChange={e => { setBundesland(e.target.value); setOrt(''); setSchulart('') }}
+                onChange={e => setBundesland(e.target.value)}
               >
                 <option value="">Alle Bundesländer</option>
                 {BUNDESLAENDER.map(bl => (
@@ -199,28 +267,91 @@ export default function SchulenPage() {
               </select>
             </div>
 
-            <div>
+            {/* Ort – Autocomplete-Suchfeld */}
+            <div ref={ortRef} style={{ position: 'relative' }}>
               <label style={labelStyle}>Ort</label>
-              <select
-                className="input"
-                value={ort}
-                onChange={e => { setOrt(e.target.value); setSchulart('') }}
-                disabled={!bundesland || orte.length === 0}
-              >
-                <option value="">Alle Orte</option>
-                {orte.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder={bundesland ? 'Ort suchen…' : 'Erst Bundesland wählen'}
+                  value={ortInput}
+                  disabled={!bundesland}
+                  onChange={e => {
+                    setOrtInput(e.target.value)
+                    if (ortSelected && e.target.value !== ortSelected) {
+                      setOrtSelected('')
+                      setSchulart('')
+                      setSchularten([])
+                    }
+                  }}
+                  onFocus={() => ortVorschlaege.length > 0 && setShowVorschlaege(true)}
+                  style={{
+                    width: '100%',
+                    paddingRight: ortInput ? 28 : undefined,
+                    opacity: !bundesland ? 0.5 : 1,
+                    cursor: !bundesland ? 'not-allowed' : 'text',
+                  }}
+                />
+                {ortInput && bundesland && (
+                  <button
+                    type="button"
+                    onClick={handleOrtClear}
+                    style={{
+                      position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: 2,
+                    }}
+                    aria-label="Ort zurücksetzen"
+                  >✕</button>
+                )}
+              </div>
+              {/* Vorschlagsliste */}
+              {showVorschlaege && ortVorschlaege.length > 0 && (
+                <ul style={{
+                  position: 'absolute', zIndex: 100, top: '100%', left: 0, right: 0,
+                  background: 'var(--surface, #fff)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                  maxHeight: 220, overflowY: 'auto',
+                  margin: 0, padding: 0, listStyle: 'none',
+                }}>
+                  {ortVorschlaege.map(o => (
+                    <li
+                      key={o}
+                      onMouseDown={() => handleOrtSelect(o)}
+                      style={{
+                        padding: '8px 12px', cursor: 'pointer', fontSize: 14,
+                        borderBottom: '1px solid var(--border)',
+                        background: o === ortSelected ? 'oklch(from var(--primary,#01696f) l c h / 0.10)' : 'transparent',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'oklch(from var(--primary,#01696f) l c h / 0.07)'}
+                      onMouseLeave={e => e.currentTarget.style.background = o === ortSelected ? 'oklch(from var(--primary,#01696f) l c h / 0.10)' : 'transparent'}
+                    >
+                      {o}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/* Hinweis wenn Ort getippt aber nicht ausgewählt */}
+              {ortInput && !ortSelected && bundesland && (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                  Ort aus der Liste wählen
+                </p>
+              )}
             </div>
 
+            {/* Schulart */}
             <div>
               <label style={labelStyle}>Schulart</label>
               <select
                 className="input"
                 value={schulart}
                 onChange={e => setSchulart(e.target.value)}
-                disabled={!bundesland || schularten.length === 0}
+                disabled={!ortSelected || schularten.length === 0}
+                style={{ opacity: !ortSelected ? 0.5 : 1, cursor: !ortSelected ? 'not-allowed' : 'default' }}
               >
-                <option value="">Alle Schularten</option>
+                <option value="">{!ortSelected ? 'Erst Ort wählen' : 'Alle Schularten'}</option>
                 {schularten.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
