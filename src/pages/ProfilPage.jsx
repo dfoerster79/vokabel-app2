@@ -48,7 +48,6 @@ export default function ProfilPage() {
   const [ortMsg, setOrtMsg] = useState(null)
   const ortRef = useRef(null)
 
-  // Merkt sich den Ort aus dem Profil, damit er nach dem Laden der Orte-Liste gesetzt werden kann
   const pendingOrtRef = useRef('')
 
   const [schulen, setSchulen] = useState([])
@@ -59,8 +58,6 @@ export default function ProfilPage() {
   const [schuleMsg, setSchuleMsg] = useState(null)
   const [gespeicherteSchule, setGespeicherteSchule] = useState(null)
 
-  // Profil laden: Ort in pendingOrtRef merken, NICHT direkt setzen
-  // (wird erst nach dem Laden der Orte-Liste gesetzt, s.u.)
   useEffect(() => {
     if (!profile) return
     setVorname(profile.vorname || '')
@@ -70,9 +67,6 @@ export default function ProfilPage() {
     setBundesland(profile.bundesland || '')
   }, [profile])
 
-  // Wenn Bundesland sich ändert: Orte laden
-  // Beim ersten Laden (Profil) wird pendingOrtRef danach wiederhergestellt
-  // Bei manuellem Bundesland-Wechsel wird Ort geleert
   const isFirstBundeslandLoad = useRef(true)
 
   useEffect(() => {
@@ -85,7 +79,6 @@ export default function ProfilPage() {
     isFirstBundeslandLoad.current = false
 
     setLoadingOrte(true)
-    // Beim manuellen Wechsel Ort zurücksetzen, beim ersten Laden den pending-Ort behalten
     if (!isInitial) {
       setOrtInput(''); setOrtGewaehlt('')
       setSchulen([]); setSchuleId('')
@@ -101,8 +94,6 @@ export default function ProfilPage() {
         } else {
           const liste = (data || []).map(r => r.ort).filter(Boolean)
           setOrte(liste)
-
-          // Nach dem ersten Laden: gespeicherten Ort aus Profil wiederherstellen
           if (isInitial && pendingOrtRef.current) {
             const gespeichert = liste.find(
               o => o.toLowerCase() === pendingOrtRef.current.toLowerCase()
@@ -146,7 +137,6 @@ export default function ProfilPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Suche immer von vorne (startsWith)
   const suggestions = ortInput.length > 0
     ? orte.filter(o => o.toLowerCase().startsWith(ortInput.toLowerCase())).slice(0, 8)
     : []
@@ -190,7 +180,7 @@ export default function ProfilPage() {
 
   const handlePwSave = async (e) => {
     e.preventDefault(); setPwMsg(null)
-    if (pwNeu.length < 6) { setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' }); return }\
+    if (pwNeu.length < 6) { setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' }); return }
     if (pwNeu !== pwWdh) { setPwMsg({ ok: false, text: 'Passwörter stimmen nicht überein.' }); return }
     setPwSaving(true)
     const { error } = await supabase.auth.updateUser({ password: pwNeu })
@@ -340,7 +330,7 @@ export default function ProfilPage() {
                       borderRadius: 8, marginTop: 2, padding: '10px 14px',
                       fontSize: 13, color: 'var(--text-muted)'
                     }}>
-                      Kein Ort gefunden für „{ortInput}".
+                      Kein Ort gefunden für „{ortInput}“.
                     </div>
                   )}
                 </div>
