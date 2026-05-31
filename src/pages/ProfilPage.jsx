@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
@@ -27,37 +27,49 @@ export default function ProfilPage() {
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState(null)
 
-  // ── Bundesland / Schule ──
+  // ── Bundesland ──
   const [bundesland, setBundesland] = useState('')
-  const [ortSuche, setOrtSuche] = useState('')
-  const [orte, setOrte] = useState([])
+
+  // ── Ort-Autocomplete ──
+  const [orte, setOrte] = useState([])          // alle Orte für das Bundesland
   const [loadingOrte, setLoadingOrte] = useState(false)
-  const [ort, setOrt] = useState('')
-  const [schulen, setSchulen] = useState([])
+  const [ortInput, setOrtInput] = useState('')  // was der User tippt
+  const [ortGewaehlt, setOrtGewaehlt] = useState('')  // bestätigter Ort
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [ortSaving, setOrtSaving] = useState(false)
+  const [ortMsg, setOrtMsg] = useState(null)
+  const ortRef = useRef(null)
+
+  // ── Schulen ──
+  const [schulen, setSchulen] = useState([])     // alle Schulen des Ortes
   const [loadingSchulen, setLoadingSchulen] = useState(false)
-  const [schuleId, setSchuleId] = useState('')
-  const [schulenLeer, setSchulenLeer] = useState(false)
+  const [schulTypFilter, setSchulTypFilter] = useState('')
+  const [schuleId, setSchuleId] = useState('')   // gewählte Schule
   const [schuleSaving, setSchuleSaving] = useState(false)
   const [schuleMsg, setSchuleMsg] = useState(null)
+  const [gespeicherteSchule, setGespeicherteSchule] = useState(null) // Name der gespeicherten Schule
 
-  // Profildaten laden
+  // Profildaten initialisieren
   useEffect(() => {
     if (!profile) return
     setVorname(profile.vorname || '')
     setNachname(profile.nachname || '')
     setBundesland(profile.bundesland || '')
-    setOrt(profile.ort || '')
+    setOrtGewaehlt(profile.ort || '')
+    setOrtInput(profile.ort || '')
     setSchuleId(profile.schule_id || '')
   }, [profile])
 
-  // Orte laden wenn Bundesland gesetzt
+  // Orte laden wenn Bundesland ändert
   useEffect(() => {
-    if (!bundesland) { setOrte([]); setOrt(''); setOrtSuche(''); setSchulen([]); setSchuleId(''); return }
+    if (!bundesland) { setOrte([]); setOrtInput(''); setOrtGewaehlt(''); setSchulen([]); setSchuleId(''); return }
     setLoadingOrte(true)
-    setOrt('')
-    setOrtSuche('')
+    setOrtInput('')
+    setOrtGewaehlt('')
     setSchulen([])
     setSchuleId('')
+    setOrtMsg(null)
+    setSchuleMsg(null)
     supabase
       .from('schulen')
       .select('ort')
@@ -70,48 +82,98 @@ export default function ProfilPage() {
       })
   }, [bundesland])
 
-  // Schulen laden wenn Ort gewählt
+  // Schulen laden wenn ortGewaehlt sich ändert
   useEffect(() => {
-    if (!ort) { setSchulen([]); setSchuleId(''); setSchulenLeer(false); return }
+    if (!ortGewaehlt) { setSchulen([]); setSchuleId(''); setSchulTypFilter(''); return }
     setLoadingSchulen(true)
-    setSchuleId('')
-    setSchulenLeer(false)
+    setSchulTypFilter('')
     supabase
       .from('schulen')
       .select('id, name, schulart')
       .eq('bundesland', bundesland)
-      .eq('ort', ort)
+      .eq('ort', ortGewaehlt)
       .order('name')
       .then(({ data }) => {
         setSchulen(data || [])
-        setSchulenLeer((data || []).length === 0)
         setLoadingSchulen(false)
       })
-  }, [ort])
+  }, [ortGewaehlt])
 
-  // Prefix-Suche: nur Orte die MIT dem Suchbegriff beginnen
-  const gefilterteOrte = ortSuche
-    ? orte.filter(o => o.toLowerCase().startsWith(ortSuche.toLowerCase()))
-    : orte
+  // Gespeicherte Schule ermitteln
+  useEffect(() => {
+    if (!schuleId || schulen.length === 0) { setGespeicherteSchule(null); return }
+    const s = schulen.find(s => s.id === schuleId || String(s.id) === String(schuleId))
+    setGespeicherteSchule(s || null)
+  }, [schuleId, schulen])
+
+  // Klick außerhalb schließt Vorschläge
+  useEffect(() => {
+    const handler = (e) => {
+      if (ortRef.current && !ortRef.current.contains(e.target)) setShowSuggestions(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Prefix-gefilterte Orte
+  const suggestions = ortInput.length > 0
+    ? orte.filter(o => o.toLowerCase().startsWith(ortInput.toLowerCase())).slice(0, 8)
+    : []
+
+  // Schultypen für Filter
+  const schultypen = [...new Set(schulen.map(s => s.schulart).filter(Boolean))].sort()
+
+  // Gefilterte Schulen
+  const gefilterteSchulen = schulTypFilter
+    ? schulen.filter(s => s.schulart === schulTypFilter)
+    : schulen
+
+  // ── Ort auswählen aus Vorschlag ──
+  const handleOrtSelect = (o) => {
+    setOrtInput(o)
+    setOrtGewaehlt('')   // noch nicht gespeichert
+    setShowSuggestions(false)
+    setSchulen([])
+    setSchuleId('')
+    setOrtMsg(null)
+    setSchuleMsg(null)
+  }
+
+  // ── Ort speichern ──
+  const handleOrtSave = async () => {
+    if (!ortInput.trim()) { setOrtMsg({ ok: false, text: 'Bitte einen Ort eingeben.' }); return }
+    const gefunden = orte.find(o => o.toLowerCase() === ortInput.trim().toLowerCase())
+    if (!gefunden) { setOrtMsg({ ok: false, text: 'Ort nicht gefunden. Bitte aus den Vorschlägen wählen.' }); return }
+    setOrtSaving(true)
+    setOrtMsg(null)
+    const { error } = await supabase.from('profiles').update({
+      bundesland,
+      ort: gefunden,
+      schule_id: null,
+    }).eq('id', user.id)
+    setOrtSaving(false)
+    if (error) { setOrtMsg({ ok: false, text: error.message }); return }
+    setOrtGewaehlt(gefunden)
+    setOrtInput(gefunden)
+    setSchuleId('')
+    setSchuleMsg(null)
+    setOrtMsg({ ok: true, text: `Ort gespeichert: ${gefunden} ✓` })
+  }
 
   // ── Name speichern ──
   const handleNameSave = async (e) => {
     e.preventDefault()
     if (!vorname.trim()) { setNameMsg({ ok: false, text: 'Vorname darf nicht leer sein.' }); return }
-    setNameSaving(true)
-    setNameMsg(null)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ vorname: vorname.trim(), nachname: nachname.trim() })
-      .eq('id', user.id)
+    setNameSaving(true); setNameMsg(null)
+    const { error } = await supabase.from('profiles')
+      .update({ vorname: vorname.trim(), nachname: nachname.trim() }).eq('id', user.id)
     setNameSaving(false)
     setNameMsg(error ? { ok: false, text: error.message } : { ok: true, text: 'Name gespeichert ✓' })
   }
 
   // ── Passwort speichern ──
   const handlePwSave = async (e) => {
-    e.preventDefault()
-    setPwMsg(null)
+    e.preventDefault(); setPwMsg(null)
     if (pwNeu.length < 6) { setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' }); return }
     if (pwNeu !== pwWdh) { setPwMsg({ ok: false, text: 'Passwörter stimmen nicht überein.' }); return }
     setPwSaving(true)
@@ -119,33 +181,27 @@ export default function ProfilPage() {
     setPwSaving(false)
     if (error) { setPwMsg({ ok: false, text: error.message }); return }
     setPwMsg({ ok: true, text: 'Passwort geändert ✓' })
-    setPwNeu('')
-    setPwWdh('')
+    setPwNeu(''); setPwWdh('')
   }
 
-  // ── Bundesland / Schule speichern ──
-  const handleSchuleSave = async (e) => {
-    e.preventDefault()
-    if (!bundesland) { setSchuleMsg({ ok: false, text: 'Bitte Bundesland wählen.' }); return }
-    setSchuleSaving(true)
-    setSchuleMsg(null)
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        bundesland,
-        ort: ort || null,
-        schule_id: schuleId || null,
-      })
-      .eq('id', user.id)
+  // ── Schule speichern ──
+  const handleSchuleSave = async (schuleIdParam) => {
+    const id = schuleIdParam || schuleId
+    setSchuleSaving(true); setSchuleMsg(null)
+    const { error } = await supabase.from('profiles')
+      .update({ schule_id: id || null }).eq('id', user.id)
     setSchuleSaving(false)
-    setSchuleMsg(error ? { ok: false, text: error.message } : { ok: true, text: 'Gespeichert ✓' })
+    if (error) { setSchuleMsg({ ok: false, text: error.message }); return }
+    setSchuleId(id)
+    const s = schulen.find(s => String(s.id) === String(id))
+    setGespeicherteSchule(s || null)
+    setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} ✓` : 'Gespeichert ✓' })
   }
 
   if (roleLoading) return (
     <div className="page-center">
       <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-        <p>Lade...</p>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div><p>Lade...</p>
       </div>
     </div>
   )
@@ -154,8 +210,7 @@ export default function ProfilPage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       <nav className="nav">
         <Link to="/dashboard" className="nav-logo">
-          <div className="nav-logo-icon">📚</div>
-          VokabelApp
+          <div className="nav-logo-icon">📚</div>VokabelApp
         </Link>
         <div className="nav-actions">
           <Link to="/dashboard" className="nav-btn">← Dashboard</Link>
@@ -175,25 +230,13 @@ export default function ProfilPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div>
                 <label style={labelStyle}>Vorname</label>
-                <input
-                  className="input"
-                  type="text"
-                  value={vorname}
-                  onChange={e => setVorname(e.target.value)}
-                  placeholder="Vorname"
-                  style={{ width: '100%' }}
-                />
+                <input className="input" type="text" value={vorname}
+                  onChange={e => setVorname(e.target.value)} placeholder="Vorname" style={{ width: '100%' }} />
               </div>
               <div>
                 <label style={labelStyle}>Nachname</label>
-                <input
-                  className="input"
-                  type="text"
-                  value={nachname}
-                  onChange={e => setNachname(e.target.value)}
-                  placeholder="Nachname"
-                  style={{ width: '100%' }}
-                />
+                <input className="input" type="text" value={nachname}
+                  onChange={e => setNachname(e.target.value)} placeholder="Nachname" style={{ width: '100%' }} />
               </div>
             </div>
             {nameMsg && <Msg msg={nameMsg} />}
@@ -209,27 +252,15 @@ export default function ProfilPage() {
           <form onSubmit={handlePwSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={labelStyle}>Neues Passwort</label>
-              <input
-                className="input"
-                type="password"
-                value={pwNeu}
-                onChange={e => setPwNeu(e.target.value)}
-                placeholder="Mindestens 6 Zeichen"
-                style={{ width: '100%' }}
-                autoComplete="new-password"
-              />
+              <input className="input" type="password" value={pwNeu}
+                onChange={e => setPwNeu(e.target.value)} placeholder="Mindestens 6 Zeichen"
+                style={{ width: '100%' }} autoComplete="new-password" />
             </div>
             <div>
               <label style={labelStyle}>Passwort wiederholen</label>
-              <input
-                className="input"
-                type="password"
-                value={pwWdh}
-                onChange={e => setPwWdh(e.target.value)}
-                placeholder="Passwort bestätigen"
-                style={{ width: '100%' }}
-                autoComplete="new-password"
-              />
+              <input className="input" type="password" value={pwWdh}
+                onChange={e => setPwWdh(e.target.value)} placeholder="Passwort bestätigen"
+                style={{ width: '100%' }} autoComplete="new-password" />
             </div>
             {pwMsg && <Msg msg={pwMsg} />}
             <button className="btn btn-primary" type="submit" disabled={pwSaving} style={{ alignSelf: 'flex-start' }}>
@@ -238,108 +269,177 @@ export default function ProfilPage() {
           </form>
         </div>
 
-        {/* ── 3. Bundesland & Schule ── */}
+        {/* ── 3. Bundesland & Ort ── */}
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={sectionTitle}>Bundesland & Schule</h3>
-          <form onSubmit={handleSchuleSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <h3 style={sectionTitle}>Bundesland & Ort</h3>
 
-            {/* Bundesland */}
-            <div>
-              <label style={labelStyle}>Bundesland</label>
-              <select
-                className="input"
-                value={bundesland}
-                onChange={e => setBundesland(e.target.value)}
-                style={{ width: '100%' }}
-              >
-                <option value="">– Bundesland wählen –</option>
-                {BUNDESLAENDER.map(bl => (
-                  <option key={bl} value={bl}>{bl}</option>
-                ))}
-              </select>
-            </div>
+          {/* Bundesland */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Bundesland</label>
+            <select className="input" value={bundesland}
+              onChange={e => setBundesland(e.target.value)} style={{ width: '100%' }}>
+              <option value="">– Bundesland wählen –</option>
+              {BUNDESLAENDER.map(bl => <option key={bl} value={bl}>{bl}</option>)}
+            </select>
+          </div>
 
-            {/* Ort-Suche (nur wenn Bundesland gewählt) */}
-            {bundesland && (
-              <div>
-                <label style={labelStyle}>Ort / Stadt</label>
-                {loadingOrte ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Orte werden geladen…</p>
-                ) : (
-                  <>
-                    <input
-                      className="input"
-                      placeholder="Ort eingeben (z.B. Stein…)"
-                      value={ortSuche}
-                      onChange={e => { setOrtSuche(e.target.value); setOrt('') }}
-                      style={{ width: '100%', marginBottom: 6 }}
-                    />
-                    {ortSuche.length > 0 && (
-                      <select
-                        className="input"
-                        value={ort}
-                        onChange={e => setOrt(e.target.value)}
-                        style={{ width: '100%' }}
-                        size={Math.min(gefilterteOrte.length + 1, 6)}
-                      >
-                        <option value="">– Ort wählen –</option>
-                        {gefilterteOrte.length === 0 ? (
-                          <option disabled>Keine Orte gefunden</option>
-                        ) : (
-                          gefilterteOrte.map(o => (
-                            <option key={o} value={o}>{o}</option>
-
-                          ))
-                        )}
-                      </select>
-                    )}
-                    {ortSuche.length === 0 && orte.length > 0 && (
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        {orte.length} Orte verfügbar – Suchbegriff eingeben
-                      </p>
-                    )}
-                    {orte.length === 0 && (
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        Noch keine Schulen für dieses Bundesland importiert.
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Schule (nur wenn Ort gewählt) */}
-            {ort && (
-              <div>
-                <label style={labelStyle}>Schule</label>
-                {loadingSchulen ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Schulen werden geladen…</p>
-                ) : schulenLeer ? (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Keine Schulen für diesen Ort gefunden.</p>
-                ) : (
-                  <select
+          {/* Ort-Autocomplete */}
+          {bundesland && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Ort / Stadt</label>
+              {loadingOrte ? (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Orte werden geladen…</p>
+              ) : (
+                <div ref={ortRef} style={{ position: 'relative' }}>
+                  <input
                     className="input"
-                    value={schuleId}
-                    onChange={e => setSchuleId(e.target.value)}
+                    placeholder="Ort eingeben…"
+                    value={ortInput}
+                    onChange={e => { setOrtInput(e.target.value); setShowSuggestions(true); setOrtGewaehlt('') }}
+                    onFocus={() => ortInput.length > 0 && setShowSuggestions(true)}
                     style={{ width: '100%' }}
-                  >
-                    <option value="">– Schule wählen (optional) –</option>
-                    {schulen.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}{s.schulart ? ` (${s.schulart})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
+                    autoComplete="off"
+                  />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <ul style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                      background: 'var(--surface, #fff)', border: '1px solid var(--border, #e0e0e0)',
+                      borderRadius: 8, marginTop: 2, padding: 0, listStyle: 'none',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto'
+                    }}>
+                      {suggestions.map(o => (
+                        <li key={o}
+                          onMouseDown={() => handleOrtSelect(o)}
+                          style={{
+                            padding: '10px 14px', cursor: 'pointer', fontSize: 14,
+                            borderBottom: '1px solid var(--border, #f0f0f0)',
+                            background: ortInput === o ? 'oklch(from var(--primary,#01696f) l c h / 0.08)' : 'transparent',
+                          }}
+                        >
+                          {o}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {showSuggestions && ortInput.length > 0 && suggestions.length === 0 && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                      background: 'var(--surface, #fff)', border: '1px solid var(--border, #e0e0e0)',
+                      borderRadius: 8, marginTop: 2, padding: '10px 14px',
+                      fontSize: 13, color: 'var(--text-muted)'
+                    }}>
+                      Kein Ort gefunden, der mit „{ortInput}“ beginnt.
+                    </div>
+                  )}
+                </div>
+              )}
+              {orte.length === 0 && !loadingOrte && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                  Noch keine Schulen für dieses Bundesland importiert.
+                </p>
+              )}
+            </div>
+          )}
 
-            {schuleMsg && <Msg msg={schuleMsg} />}
-            <button className="btn btn-primary" type="submit" disabled={schuleSaving || !bundesland} style={{ alignSelf: 'flex-start' }}>
-              {schuleSaving ? 'Speichern…' : 'Bundesland & Schule speichern'}
+          {ortMsg && <div style={{ marginBottom: 10 }}><Msg msg={ortMsg} /></div>}
+
+          {bundesland && !loadingOrte && orte.length > 0 && (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={handleOrtSave}
+              disabled={ortSaving || !ortInput.trim()}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              {ortSaving ? 'Speichern…' : 'Ort speichern'}
             </button>
-          </form>
+          )}
         </div>
+
+        {/* ── 4. Schule (nach Ort-Speicherung) ── */}
+        {ortGewaehlt && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 style={sectionTitle}>Schule in {ortGewaehlt}</h3>
+
+            {loadingSchulen ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Schulen werden geladen…</p>
+            ) : schulen.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Keine Schulen für diesen Ort gefunden.</p>
+            ) : (
+              <>
+                {/* Aktuell gespeicherte Schule */}
+                {gespeicherteSchule && (
+                  <div style={{
+                    marginBottom: 14, padding: '8px 12px', borderRadius: 8,
+                    background: 'oklch(from var(--primary,#01696f) l c h / 0.08)',
+                    border: '1px solid oklch(from var(--primary,#01696f) l c h / 0.25)',
+                    fontSize: 13, color: 'var(--primary,#01696f)'
+                  }}>
+                    ✓ Gespeichert: <strong>{gespeicherteSchule.name}</strong>
+                    {gespeicherteSchule.schulart && (
+                      <span style={badgeStyle}>{gespeicherteSchule.schulart}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Schultyp-Filter (ab 3 Schulen) */}
+                {schulen.length > 3 && schultypen.length > 1 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Schultyp filtern</label>
+                    <select className="input" value={schulTypFilter}
+                      onChange={e => setSchulTypFilter(e.target.value)} style={{ width: '100%' }}>
+                      <option value="">Alle Schultypen ({schulen.length})</option>
+                      {schultypen.map(t => (
+                        <option key={t} value={t}>{t} ({schulen.filter(s => s.schulart === t).length})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Schul-Karten */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {gefilterteSchulen.map(s => {
+                    const isSelected = String(s.id) === String(schuleId)
+                    return (
+                      <div key={s.id}
+                        onClick={() => handleSchuleSave(s.id)}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          border: isSelected
+                            ? '2px solid var(--primary,#01696f)'
+                            : '1px solid var(--border, #e0e0e0)',
+                          background: isSelected
+                            ? 'oklch(from var(--primary,#01696f) l c h / 0.07)'
+                            : 'var(--surface, #fff)',
+                          cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{s.name}</div>
+                          {s.schulart && (
+                            <span style={badgeStyle}>{s.schulart}</span>
+                          )}
+                        </div>
+                        {isSelected && (
+                          <span style={{ fontSize: 18, color: 'var(--primary,#01696f)', flexShrink: 0 }}>✓</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
+
+                {schuleSaving && (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Wird gespeichert…</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
       </div>
     </div>
@@ -349,16 +449,10 @@ export default function ProfilPage() {
 function Msg({ msg }) {
   return (
     <p style={{
-      fontSize: 13,
-      padding: '7px 12px',
-      borderRadius: 8,
-      background: msg.ok
-        ? 'oklch(from var(--primary,#01696f) l c h / 0.10)'
-        : 'oklch(from var(--error,#a12c7b) l c h / 0.08)',
+      fontSize: 13, padding: '7px 12px', borderRadius: 8,
+      background: msg.ok ? 'oklch(from var(--primary,#01696f) l c h / 0.10)' : 'oklch(from var(--error,#a12c7b) l c h / 0.08)',
       color: msg.ok ? 'var(--primary,#01696f)' : 'var(--error,#a12c7b)',
-      border: msg.ok
-        ? '1px solid oklch(from var(--primary,#01696f) l c h / 0.25)'
-        : '1px solid oklch(from var(--error,#a12c7b) l c h / 0.25)',
+      border: msg.ok ? '1px solid oklch(from var(--primary,#01696f) l c h / 0.25)' : '1px solid oklch(from var(--error,#a12c7b) l c h / 0.25)',
     }}>
       {msg.text}
     </p>
@@ -366,18 +460,17 @@ function Msg({ msg }) {
 }
 
 const labelStyle = {
-  display: 'block',
-  fontSize: 12,
-  color: 'var(--text-muted)',
-  marginBottom: 4,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+  display: 'block', fontSize: 12, color: 'var(--text-muted)',
+  marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
 }
 
 const sectionTitle = {
-  fontSize: 15,
-  fontWeight: 700,
-  marginBottom: 14,
-  color: 'var(--text)',
+  fontSize: 15, fontWeight: 700, marginBottom: 14, color: 'var(--text)',
+}
+
+const badgeStyle = {
+  display: 'inline-block', marginLeft: 6, marginTop: 3,
+  background: 'oklch(from var(--primary,#01696f) l c h / 0.10)',
+  color: 'var(--primary,#01696f)',
+  borderRadius: 4, padding: '1px 7px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
 }
