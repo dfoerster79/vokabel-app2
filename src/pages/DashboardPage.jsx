@@ -67,6 +67,19 @@ export default function DashboardPage() {
         <div className="welcome-banner">
           <h2>Hallo, {vorname}! 👋</h2>
           <p>{config.greeting}</p>
+          <Link
+            to="/profil"
+            style={{
+              display: 'inline-block',
+              marginTop: 10,
+              fontSize: 13,
+              color: 'rgba(255,255,255,0.85)',
+              textDecoration: 'underline',
+              textUnderlineOffset: 3,
+            }}
+          >
+            Profil verwalten
+          </Link>
         </div>
 
         <p className="section-title">Schnellzugriff</p>
