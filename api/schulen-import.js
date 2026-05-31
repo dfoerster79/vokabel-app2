@@ -25,6 +25,13 @@ const BUNDESLAENDER = [
   { kuerzel: 'TH', name: 'Thüringen' },
 ]
 
+// Normalisiert den Ort-Wert: trimmt Whitespace, gibt null zurück wenn leer
+function normalizeOrt(val) {
+  if (!val) return null
+  const trimmed = String(val).trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 async function fetchSchulenForState(kuerzel) {
   let all = [], skip = 0
   const limit = 500
@@ -47,6 +54,9 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase-Konfiguration fehlt.' })
   }
 
+  // Debug-Modus: nur Bayern wenn ?debug=BY übergeben
+  const debugState = req.query?.debug || null
+
   const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
   // Server-Sent Events Headers
@@ -61,14 +71,18 @@ export default async function handler(req, res) {
     if (res.flush) res.flush()
   }
 
+  const zuImportieren = debugState
+    ? BUNDESLAENDER.filter(b => b.kuerzel === debugState)
+    : BUNDESLAENDER
+
   const BATCH = 100
   let totalImported = 0
   let totalErrors = 0
 
-  send({ type: 'start', total: BUNDESLAENDER.length })
+  send({ type: 'start', total: zuImportieren.length })
 
-  for (let i = 0; i < BUNDESLAENDER.length; i++) {
-    const { kuerzel, name } = BUNDESLAENDER[i]
+  for (let i = 0; i < zuImportieren.length; i++) {
+    const { kuerzel, name } = zuImportieren[i]
 
     send({ type: 'state_start', kuerzel, name, index: i })
 
@@ -88,6 +102,27 @@ export default async function handler(req, res) {
       send({ type: 'log', kuerzel, msg: `⚠️ ${dupCount} Duplikate entfernt` })
     }
 
+    // DEBUG: Zeige alle Felder der ersten Schule damit wir die API-Struktur kennen
+    if (unique.length > 0) {
+      const sample = unique[0]
+      send({ type: 'log', kuerzel, msg: `🔍 API-Felder (Beispiel): ${Object.keys(sample).join(', ')}` })
+      send({ type: 'log', kuerzel, msg: `🔍 city="${sample.city}" | name="${sample.name}" | school_type="${sample.school_type}"` })
+    }
+
+    // DEBUG: Suche explizit nach Zirndorf in den Rohdaten
+    const zirndorf = unique.filter(s =>
+      (s.city && s.city.toLowerCase().includes('zirndorf')) ||
+      (s.name && s.name.toLowerCase().includes('zirndorf'))
+    )
+    if (zirndorf.length > 0) {
+      send({ type: 'log', kuerzel, msg: `✅ Zirndorf gefunden (${zirndorf.length} Schulen):` })
+      zirndorf.forEach(s => {
+        send({ type: 'log', kuerzel, msg: `   → id="${s.id}" | name="${s.name}" | city="${s.city}" | address="${s.address}" | zip="${s.zip}"` })
+      })
+    } else {
+      send({ type: 'log', kuerzel, msg: `❌ KEINE Zirndorf-Schulen in API-Antwort gefunden! (${unique.length} Schulen total)` })
+    }
+
     let blImported = 0
     let blErrors = 0
 
@@ -97,7 +132,7 @@ export default async function handler(req, res) {
         name:       s.name || null,
         schulart:   s.school_type || null,
         bundesland: kuerzel,
-        ort:        s.city || null,
+        ort:        normalizeOrt(s.city),
         adresse:    [s.address, s.zip, s.city].filter(Boolean).join(', ') || null,
       }))
 
