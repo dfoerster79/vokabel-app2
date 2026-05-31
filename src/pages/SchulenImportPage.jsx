@@ -33,6 +33,8 @@ export default function SchulenImportPage() {
   const [activeKuerzel, setActiveKuerzel] = useState(null)
   const [completed, setCompleted] = useState({})
   const [progress, setProgress] = useState(0)
+  // debug=BY: nur Bayern importieren (für Diagnose)
+  const [debugBayern, setDebugBayern] = useState(true)
   const logRef = useRef(null)
 
   if (loading) return (
@@ -63,10 +65,12 @@ export default function SchulenImportPage() {
     setActiveKuerzel(null)
     setCompleted({})
     setProgress(0)
-    addLog('🚀 Starte Import über Server-API …')
+
+    const url = debugBayern ? '/api/schulen-import?debug=BY' : '/api/schulen-import'
+    addLog(debugBayern ? '🔍 Debug-Modus: Nur Bayern wird importiert …' : '🚀 Starte Import über Server-API …')
 
     try {
-      const res = await fetch('/api/schulen-import', {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
@@ -88,7 +92,7 @@ export default function SchulenImportPage() {
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
-        buffer = lines.pop() // letztes (u.U. unvollständiges) Stück aufheben
+        buffer = lines.pop()
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
@@ -121,7 +125,7 @@ export default function SchulenImportPage() {
       case 'state_done':
         setActiveKuerzel(null)
         setCompleted(prev => ({ ...prev, [evt.kuerzel]: evt.errors === 0 ? 'ok' : 'warn' }))
-        setProgress(Math.round(((evt.index + 1) / BUNDESLAENDER.length) * 100))
+        setProgress(Math.round(((evt.index + 1) / (debugBayern ? 1 : BUNDESLAENDER.length)) * 100))
         addLog(`✓ ${evt.name}: ${(evt.total || 0).toLocaleString('de-DE')} Schulen (${evt.imported} importiert, ${evt.errors} Fehler)`)
         break
       case 'done':
@@ -152,6 +156,22 @@ export default function SchulenImportPage() {
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
             Alle 16 Bundesländer werden importiert. Bestehende Schulen werden aktualisiert.
           </p>
+        </div>
+
+        {/* Debug-Toggle */}
+        <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={debugBayern}
+              onChange={e => setDebugBayern(e.target.checked)}
+              disabled={running}
+            />
+            <span>🔍 <strong>Debug-Modus:</strong> Nur Bayern importieren (mit Zirndorf-Diagnose im Log)</span>
+          </label>
+          {!debugBayern && (
+            <span style={{ fontSize: 12, color: '#d19900' }}>⚠️ Alle 16 Bundesländer werden importiert</span>
+          )}
         </div>
 
         {/* Fortschrittsbalken */}
@@ -199,11 +219,13 @@ export default function SchulenImportPage() {
               const isActive = activeKuerzel === bl.kuerzel
               const isDone = !!status
               const isError = status === 'warn'
+              const isSkipped = debugBayern && bl.kuerzel !== 'BY'
 
               return (
                 <div key={bl.kuerzel} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '7px 10px', borderRadius: 7,
+                  opacity: isSkipped ? 0.35 : 1,
                   background: isActive
                     ? 'oklch(from var(--primary, #01696f) l c h / 0.08)'
                     : isDone
@@ -212,7 +234,6 @@ export default function SchulenImportPage() {
                   border: isActive ? '1px solid oklch(from var(--primary, #01696f) l c h / 0.25)' : '1px solid transparent',
                   transition: 'all 0.3s ease',
                 }}>
-                  {/* Status-Dot */}
                   <span style={{
                     width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
                     background: isDone
@@ -267,7 +288,12 @@ export default function SchulenImportPage() {
             disabled={running}
             style={{ minWidth: 220 }}
           >
-            {running ? '⏳ Import läuft…' : '▶️ Alle Bundesländer importieren'}
+            {running
+              ? '⏳ Import läuft…'
+              : debugBayern
+              ? '🔍 Bayern debuggen'
+              : '▶️ Alle Bundesländer importieren'
+            }
           </button>
 
           {done && stats.errors === 0 && (
