@@ -92,7 +92,6 @@ export default function ProfilPage() {
           console.error('Fehler beim Laden der Orte:', error)
           setOrte([])
         } else {
-          // Alphabetisch sortieren damit startsWith-Treffer zuerst kommen
           const liste = (data || []).map(r => r.ort).filter(Boolean).sort((a, b) => a.localeCompare(b, 'de'))
           setOrte(liste)
           if (isInitial && pendingOrtRef.current) {
@@ -138,14 +137,9 @@ export default function ProfilPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Suche: startsWith-Treffer zuerst, dann includes-Treffer, max 10
+  // Suche nur startsWith, alphabetisch sortiert, max 10
   const suggestions = ortInput.length > 0
-    ? (() => {
-        const q = ortInput.toLowerCase()
-        const starts = orte.filter(o => o.toLowerCase().startsWith(q))
-        const contains = orte.filter(o => !o.toLowerCase().startsWith(q) && o.toLowerCase().includes(q))
-        return [...starts, ...contains].slice(0, 10)
-      })()
+    ? orte.filter(o => o.toLowerCase().startsWith(ortInput.toLowerCase())).slice(0, 10)
     : []
 
   const schultypen = [...new Set(schulen.map(s => s.schulart).filter(Boolean))].sort()
