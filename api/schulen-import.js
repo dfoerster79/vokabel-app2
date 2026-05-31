@@ -25,7 +25,6 @@ const BUNDESLAENDER = [
   { kuerzel: 'TH', name: 'Thüringen' },
 ]
 
-// Normalisiert den Ort-Wert: trimmt Whitespace, gibt null zurück wenn leer
 function normalizeOrt(val) {
   if (!val) return null
   const trimmed = String(val).trim()
@@ -54,12 +53,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Supabase-Konfiguration fehlt.' })
   }
 
-  // Debug-Modus: nur Bayern wenn ?debug=BY übergeben
   const debugState = req.query?.debug || null
 
   const supabase = createClient(supabaseUrl, supabaseSecretKey)
 
-  // Server-Sent Events Headers
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
@@ -96,31 +93,46 @@ export default async function handler(req, res) {
       continue
     }
 
-    const unique = Array.from(new Map(schulen.map(s => [s.id, s])).values())
-    const dupCount = schulen.length - unique.length
-    if (dupCount > 0) {
-      send({ type: 'log', kuerzel, msg: `⚠️ ${dupCount} Duplikate entfernt` })
-    }
+    send({ type: 'log', kuerzel, msg: `📦 API lieferte ${schulen.length} Einträge (vor Deduplizierung)` })
 
-    // DEBUG: Zeige alle Felder der ersten Schule damit wir die API-Struktur kennen
-    if (unique.length > 0) {
-      const sample = unique[0]
-      send({ type: 'log', kuerzel, msg: `🔍 API-Felder (Beispiel): ${Object.keys(sample).join(', ')}` })
-      send({ type: 'log', kuerzel, msg: `🔍 city="${sample.city}" | name="${sample.name}" | school_type="${sample.school_type}"` })
-    }
-
-    // DEBUG: Suche explizit nach Zirndorf in den Rohdaten
-    const zirndorf = unique.filter(s =>
+    // DEBUG: Zirndorf in den ROHDATEN (vor Deduplizierung)
+    const zirndorfRoh = schulen.filter(s =>
       (s.city && s.city.toLowerCase().includes('zirndorf')) ||
       (s.name && s.name.toLowerCase().includes('zirndorf'))
     )
-    if (zirndorf.length > 0) {
-      send({ type: 'log', kuerzel, msg: `✅ Zirndorf gefunden (${zirndorf.length} Schulen):` })
-      zirndorf.forEach(s => {
-        send({ type: 'log', kuerzel, msg: `   → id="${s.id}" | name="${s.name}" | city="${s.city}" | address="${s.address}" | zip="${s.zip}"` })
+    if (zirndorfRoh.length > 0) {
+      send({ type: 'log', kuerzel, msg: `✅ Zirndorf in Rohdaten: ${zirndorfRoh.length} Einträge` })
+      zirndorfRoh.forEach(s => {
+        send({ type: 'log', kuerzel, msg: `   id="${s.id}" | name="${s.name}" | city="${s.city}"` })
       })
     } else {
-      send({ type: 'log', kuerzel, msg: `❌ KEINE Zirndorf-Schulen in API-Antwort gefunden! (${unique.length} Schulen total)` })
+      send({ type: 'log', kuerzel, msg: `❌ Zirndorf NICHT in Rohdaten – API liefert diese Schulen gar nicht!` })
+      // Zeige alle verfügbaren Städte als Stichprobe (erste 20)
+      const staedte = [...new Set(schulen.map(s => s.city).filter(Boolean))].slice(0, 20)
+      send({ type: 'log', kuerzel, msg: `   Stichprobe Städte: ${staedte.join(', ')}` })
+    }
+
+    // Deduplizierung: Map behält letzten Eintrag pro ID
+    const idMap = new Map()
+    for (const s of schulen) {
+      idMap.set(s.id, s)
+    }
+    const unique = Array.from(idMap.values())
+    const dupCount = schulen.length - unique.length
+
+    if (dupCount > 0) {
+      send({ type: 'log', kuerzel, msg: `⚠️ ${dupCount} Duplikate entfernt (${schulen.length} → ${unique.length})` })
+    }
+
+    // DEBUG: Zirndorf nach Deduplizierung
+    const zirndorfNach = unique.filter(s =>
+      (s.city && s.city.toLowerCase().includes('zirndorf')) ||
+      (s.name && s.name.toLowerCase().includes('zirndorf'))
+    )
+    if (zirndorfRoh.length > 0 && zirndorfNach.length === 0) {
+      send({ type: 'log', kuerzel, msg: `❌ Zirndorf durch Deduplizierung verloren! IDs wurden überschrieben.` })
+    } else if (zirndorfNach.length > 0) {
+      send({ type: 'log', kuerzel, msg: `✅ Zirndorf nach Deduplizierung noch vorhanden: ${zirndorfNach.length} Schulen` })
     }
 
     let blImported = 0
