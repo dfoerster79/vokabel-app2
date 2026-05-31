@@ -71,6 +71,7 @@ export default function ProfilPage() {
       setOrte([]); setOrtInput(''); setOrtGewaehlt('')
       setSchulen([]); setSchuleId(''); return
     }
+    console.log('🔍 Orte laden für bundesland:', JSON.stringify(bundesland), 'length:', bundesland.length)
     setLoadingOrte(true)
     setOrtInput(''); setOrtGewaehlt('')
     setSchulen([]); setSchuleId('')
@@ -80,7 +81,8 @@ export default function ProfilPage() {
       .select('ort')
       .eq('bundesland', bundesland)
       .order('ort')
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        console.log('📦 Supabase Ergebnis:', { count: data?.length, error, erstesOrt: data?.[0] })
         const unique = [...new Set((data || []).map(r => r.ort).filter(Boolean))].sort()
         setOrte(unique)
         setLoadingOrte(false)
