@@ -7,7 +7,7 @@ import { useRole } from '../hooks/useRole.js'
 const BUNDESLAENDER = [
   { kuerzel: 'BB', name: 'Brandenburg' },
   { kuerzel: 'BE', name: 'Berlin' },
-  { kuerzel: 'BW', name: 'Baden-W\u00FCrttemberg' },
+  { kuerzel: 'BW', name: 'Baden-Württemberg' },
   { kuerzel: 'BY', name: 'Bayern' },
   { kuerzel: 'HB', name: 'Bremen' },
   { kuerzel: 'HE', name: 'Hessen' },
@@ -20,29 +20,25 @@ const BUNDESLAENDER = [
   { kuerzel: 'SL', name: 'Saarland' },
   { kuerzel: 'SN', name: 'Sachsen' },
   { kuerzel: 'ST', name: 'Sachsen-Anhalt' },
-  { kuerzel: 'TH', name: 'Th\u00FCringen' },
+  { kuerzel: 'TH', name: 'Thüringen' },
 ]
 
 export default function ProfilPage() {
   const { user } = useAuthStore()
   const { profile, loading: roleLoading } = useRole()
 
-  // \u2500\u2500 Name \u2500\u2500
   const [vorname, setVorname] = useState('')
   const [nachname, setNachname] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameMsg, setNameMsg] = useState(null)
 
-  // \u2500\u2500 Passwort \u2500\u2500
   const [pwNeu, setPwNeu] = useState('')
   const [pwWdh, setPwWdh] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState(null)
 
-  // \u2500\u2500 Bundesland \u2500\u2500 (speichert K\u00FCrzel z.B. "BY")
   const [bundesland, setBundesland] = useState('')
 
-  // \u2500\u2500 Ort-Autocomplete \u2500\u2500
   const [orte, setOrte] = useState([])
   const [loadingOrte, setLoadingOrte] = useState(false)
   const [ortInput, setOrtInput] = useState('')
@@ -52,7 +48,6 @@ export default function ProfilPage() {
   const [ortMsg, setOrtMsg] = useState(null)
   const ortRef = useRef(null)
 
-  // \u2500\u2500 Schulen \u2500\u2500
   const [schulen, setSchulen] = useState([])
   const [loadingSchulen, setLoadingSchulen] = useState(false)
   const [schulTypFilter, setSchulTypFilter] = useState('')
@@ -61,7 +56,6 @@ export default function ProfilPage() {
   const [schuleMsg, setSchuleMsg] = useState(null)
   const [gespeicherteSchule, setGespeicherteSchule] = useState(null)
 
-  // Profildaten initialisieren
   useEffect(() => {
     if (!profile) return
     setVorname(profile.vorname || '')
@@ -72,20 +66,19 @@ export default function ProfilPage() {
     setSchuleId(profile.schule_id || '')
   }, [profile])
 
-  // Orte laden wenn Bundesland \u00E4ndert
   useEffect(() => {
-    if (!bundesland) { setOrte([]); setOrtInput(''); setOrtGewaehlt(''); setSchulen([]); setSchuleId(''); return }
+    if (!bundesland) {
+      setOrte([]); setOrtInput(''); setOrtGewaehlt('')
+      setSchulen([]); setSchuleId(''); return
+    }
     setLoadingOrte(true)
-    setOrtInput('')
-    setOrtGewaehlt('')
-    setSchulen([])
-    setSchuleId('')
-    setOrtMsg(null)
-    setSchuleMsg(null)
+    setOrtInput(''); setOrtGewaehlt('')
+    setSchulen([]); setSchuleId('')
+    setOrtMsg(null); setSchuleMsg(null)
     supabase
       .from('schulen')
       .select('ort')
-      .eq('bundesland', bundesland)   // K\u00FCrzel z.B. "BY"
+      .eq('bundesland', bundesland)
       .order('ort')
       .then(({ data }) => {
         const unique = [...new Set((data || []).map(r => r.ort).filter(Boolean))].sort()
@@ -94,7 +87,6 @@ export default function ProfilPage() {
       })
   }, [bundesland])
 
-  // Schulen laden wenn ortGewaehlt sich \u00E4ndert
   useEffect(() => {
     if (!ortGewaehlt) { setSchulen([]); setSchuleId(''); setSchulTypFilter(''); return }
     setLoadingSchulen(true)
@@ -111,14 +103,12 @@ export default function ProfilPage() {
       })
   }, [ortGewaehlt])
 
-  // Gespeicherte Schule ermitteln
   useEffect(() => {
     if (!schuleId || schulen.length === 0) { setGespeicherteSchule(null); return }
     const s = schulen.find(s => String(s.id) === String(schuleId))
     setGespeicherteSchule(s || null)
   }, [schuleId, schulen])
 
-  // Klick au\u00DFerhalb schlie\u00DFt Vorschl\u00E4ge
   useEffect(() => {
     const handler = (e) => {
       if (ortRef.current && !ortRef.current.contains(e.target)) setShowSuggestions(false)
@@ -127,55 +117,37 @@ export default function ProfilPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Anzeigename f\u00FCr gew\u00E4hltes Bundesland
-  const bundeslandName = BUNDESLAENDER.find(b => b.kuerzel === bundesland)?.name || bundesland
-
-  // Prefix-gefilterte Orte
   const suggestions = ortInput.length > 0
     ? orte.filter(o => o.toLowerCase().startsWith(ortInput.toLowerCase())).slice(0, 8)
     : []
 
-  // Schultypen f\u00FCr Filter
   const schultypen = [...new Set(schulen.map(s => s.schulart).filter(Boolean))].sort()
+  const gefilterteSchulen = schulTypFilter ? schulen.filter(s => s.schulart === schulTypFilter) : schulen
 
-  // Gefilterte Schulen
-  const gefilterteSchulen = schulTypFilter
-    ? schulen.filter(s => s.schulart === schulTypFilter)
-    : schulen
-
-  // \u2500\u2500 Ort ausw\u00E4hlen aus Vorschlag \u2500\u2500
   const handleOrtSelect = (o) => {
     setOrtInput(o)
     setOrtGewaehlt('')
     setShowSuggestions(false)
-    setSchulen([])
-    setSchuleId('')
-    setOrtMsg(null)
-    setSchuleMsg(null)
+    setSchulen([]); setSchuleId('')
+    setOrtMsg(null); setSchuleMsg(null)
   }
 
-  // \u2500\u2500 Ort speichern \u2500\u2500
   const handleOrtSave = async () => {
     if (!ortInput.trim()) { setOrtMsg({ ok: false, text: 'Bitte einen Ort eingeben.' }); return }
     const gefunden = orte.find(o => o.toLowerCase() === ortInput.trim().toLowerCase())
-    if (!gefunden) { setOrtMsg({ ok: false, text: 'Ort nicht gefunden. Bitte aus den Vorschl\u00E4gen w\u00E4hlen.' }); return }
-    setOrtSaving(true)
-    setOrtMsg(null)
+    if (!gefunden) { setOrtMsg({ ok: false, text: 'Ort nicht gefunden. Bitte aus den Vorschlägen wählen.' }); return }
+    setOrtSaving(true); setOrtMsg(null)
     const { error } = await supabase.from('profiles').update({
-      bundesland,
-      ort: gefunden,
-      schule_id: null,
+      bundesland, ort: gefunden, schule_id: null,
     }).eq('id', user.id)
     setOrtSaving(false)
     if (error) { setOrtMsg({ ok: false, text: error.message }); return }
     setOrtGewaehlt(gefunden)
     setOrtInput(gefunden)
-    setSchuleId('')
-    setSchuleMsg(null)
-    setOrtMsg({ ok: true, text: `Ort gespeichert: ${gefunden} \u2713` })
+    setSchuleId(''); setSchuleMsg(null)
+    setOrtMsg({ ok: true, text: `Ort gespeichert: ${gefunden} ✓` })
   }
 
-  // \u2500\u2500 Name speichern \u2500\u2500
   const handleNameSave = async (e) => {
     e.preventDefault()
     if (!vorname.trim()) { setNameMsg({ ok: false, text: 'Vorname darf nicht leer sein.' }); return }
@@ -183,23 +155,21 @@ export default function ProfilPage() {
     const { error } = await supabase.from('profiles')
       .update({ vorname: vorname.trim(), nachname: nachname.trim() }).eq('id', user.id)
     setNameSaving(false)
-    setNameMsg(error ? { ok: false, text: error.message } : { ok: true, text: 'Name gespeichert \u2713' })
+    setNameMsg(error ? { ok: false, text: error.message } : { ok: true, text: 'Name gespeichert ✓' })
   }
 
-  // \u2500\u2500 Passwort speichern \u2500\u2500
   const handlePwSave = async (e) => {
     e.preventDefault(); setPwMsg(null)
     if (pwNeu.length < 6) { setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' }); return }
-    if (pwNeu !== pwWdh) { setPwMsg({ ok: false, text: 'Passw\u00F6rter stimmen nicht \u00FCberein.' }); return }
+    if (pwNeu !== pwWdh) { setPwMsg({ ok: false, text: 'Passwörter stimmen nicht überein.' }); return }
     setPwSaving(true)
     const { error } = await supabase.auth.updateUser({ password: pwNeu })
     setPwSaving(false)
     if (error) { setPwMsg({ ok: false, text: error.message }); return }
-    setPwMsg({ ok: true, text: 'Passwort ge\u00E4ndert \u2713' })
+    setPwMsg({ ok: true, text: 'Passwort geändert ✓' })
     setPwNeu(''); setPwWdh('')
   }
 
-  // \u2500\u2500 Schule speichern \u2500\u2500
   const handleSchuleSave = async (schuleIdParam) => {
     const id = schuleIdParam || schuleId
     setSchuleSaving(true); setSchuleMsg(null)
@@ -210,13 +180,13 @@ export default function ProfilPage() {
     setSchuleId(id)
     const s = schulen.find(s => String(s.id) === String(id))
     setGespeicherteSchule(s || null)
-    setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} \u2713` : 'Gespeichert \u2713' })
+    setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} ✓` : 'Gespeichert ✓' })
   }
 
   if (roleLoading) return (
     <div className="page-center">
       <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>\u23F3</div><p>Lade...</p>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div><p>Lade...</p>
       </div>
     </div>
   )
@@ -225,20 +195,20 @@ export default function ProfilPage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       <nav className="nav">
         <Link to="/dashboard" className="nav-logo">
-          <div className="nav-logo-icon">\uD83D\uDCDA</div>VokabelApp
+          <div className="nav-logo-icon">📚</div>VokabelApp
         </Link>
         <div className="nav-actions">
-          <Link to="/dashboard" className="nav-btn">\u2190 Dashboard</Link>
+          <Link to="/dashboard" className="nav-btn">← Dashboard</Link>
         </div>
       </nav>
 
       <div className="main-content">
         <div className="welcome-banner" style={{ marginBottom: 24 }}>
-          <h2>\uD83D\uDC64 Mein Profil</h2>
-          <p>Deine pers\u00F6nlichen Einstellungen verwalten.</p>
+          <h2>👤 Mein Profil</h2>
+          <p>Deine persönlichen Einstellungen verwalten.</p>
         </div>
 
-        {/* \u2500\u2500 1. Name \u2500\u2500 */}
+        {/* Name */}
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={sectionTitle}>Name</h3>
           <form onSubmit={handleNameSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -256,14 +226,14 @@ export default function ProfilPage() {
             </div>
             {nameMsg && <Msg msg={nameMsg} />}
             <button className="btn btn-primary" type="submit" disabled={nameSaving} style={{ alignSelf: 'flex-start' }}>
-              {nameSaving ? 'Speichern\u2026' : 'Name speichern'}
+              {nameSaving ? 'Speichern…' : 'Name speichern'}
             </button>
           </form>
         </div>
 
-        {/* \u2500\u2500 2. Passwort \u2500\u2500 */}
+        {/* Passwort */}
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={sectionTitle}>Passwort \u00E4ndern</h3>
+          <h3 style={sectionTitle}>Passwort ändern</h3>
           <form onSubmit={handlePwSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={labelStyle}>Neues Passwort</label>
@@ -274,43 +244,41 @@ export default function ProfilPage() {
             <div>
               <label style={labelStyle}>Passwort wiederholen</label>
               <input className="input" type="password" value={pwWdh}
-                onChange={e => setPwWdh(e.target.value)} placeholder="Passwort best\u00E4tigen"
+                onChange={e => setPwWdh(e.target.value)} placeholder="Passwort bestätigen"
                 style={{ width: '100%' }} autoComplete="new-password" />
             </div>
             {pwMsg && <Msg msg={pwMsg} />}
             <button className="btn btn-primary" type="submit" disabled={pwSaving} style={{ alignSelf: 'flex-start' }}>
-              {pwSaving ? 'Speichern\u2026' : 'Passwort \u00E4ndern'}
+              {pwSaving ? 'Speichern…' : 'Passwort ändern'}
             </button>
           </form>
         </div>
 
-        {/* \u2500\u2500 3. Bundesland & Ort \u2500\u2500 */}
+        {/* Bundesland & Ort */}
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={sectionTitle}>Bundesland & Ort</h3>
+          <h3 style={sectionTitle}>Bundesland &amp; Ort</h3>
 
-          {/* Bundesland-Dropdown zeigt Langnamen, speichert K\u00FCrzel */}
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Bundesland</label>
             <select className="input" value={bundesland}
               onChange={e => setBundesland(e.target.value)} style={{ width: '100%' }}>
-              <option value="">\u2013 Bundesland w\u00E4hlen \u2013</option>
+              <option value="">– Bundesland wählen –</option>
               {BUNDESLAENDER.map(bl => (
                 <option key={bl.kuerzel} value={bl.kuerzel}>{bl.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Ort-Autocomplete */}
           {bundesland && (
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>Ort / Stadt</label>
               {loadingOrte ? (
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Orte werden geladen\u2026</p>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Orte werden geladen…</p>
               ) : (
                 <div ref={ortRef} style={{ position: 'relative' }}>
                   <input
                     className="input"
-                    placeholder="Ort eingeben\u2026"
+                    placeholder="Ort eingeben…"
                     value={ortInput}
                     onChange={e => { setOrtInput(e.target.value); setShowSuggestions(true); setOrtGewaehlt('') }}
                     onFocus={() => ortInput.length > 0 && setShowSuggestions(true)}
@@ -325,8 +293,7 @@ export default function ProfilPage() {
                       boxShadow: '0 4px 16px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto'
                     }}>
                       {suggestions.map(o => (
-                        <li key={o}
-                          onMouseDown={() => handleOrtSelect(o)}
+                        <li key={o} onMouseDown={() => handleOrtSelect(o)}
                           style={{
                             padding: '10px 14px', cursor: 'pointer', fontSize: 14,
                             borderBottom: '1px solid var(--border, #f0f0f0)',
@@ -343,14 +310,14 @@ export default function ProfilPage() {
                       borderRadius: 8, marginTop: 2, padding: '10px 14px',
                       fontSize: 13, color: 'var(--text-muted)'
                     }}>
-                      Kein Ort gefunden, der mit \u201E{ortInput}\u201C beginnt.
+                      Kein Ort gefunden, der mit „{ortInput}" beginnt.
                     </div>
                   )}
                 </div>
               )}
               {orte.length === 0 && !loadingOrte && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                  Noch keine Schulen f\u00FCr dieses Bundesland importiert.
+                  Noch keine Schulen für dieses Bundesland importiert.
                 </p>
               )}
             </div>
@@ -362,20 +329,20 @@ export default function ProfilPage() {
             <button className="btn btn-primary" type="button"
               onClick={handleOrtSave} disabled={ortSaving || !ortInput.trim()}
               style={{ alignSelf: 'flex-start' }}>
-              {ortSaving ? 'Speichern\u2026' : 'Ort speichern'}
+              {ortSaving ? 'Speichern…' : 'Ort speichern'}
             </button>
           )}
         </div>
 
-        {/* \u2500\u2500 4. Schule (nach Ort-Speicherung) \u2500\u2500 */}
+        {/* Schule */}
         {ortGewaehlt && (
           <div className="card" style={{ marginBottom: 16 }}>
             <h3 style={sectionTitle}>Schule in {ortGewaehlt}</h3>
 
             {loadingSchulen ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Schulen werden geladen\u2026</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Schulen werden geladen…</p>
             ) : schulen.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Keine Schulen f\u00FCr diesen Ort gefunden.</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Keine Schulen für diesen Ort gefunden.</p>
             ) : (
               <>
                 {gespeicherteSchule && (
@@ -385,7 +352,7 @@ export default function ProfilPage() {
                     border: '1px solid oklch(from var(--primary,#01696f) l c h / 0.25)',
                     fontSize: 13, color: 'var(--primary,#01696f)'
                   }}>
-                    \u2713 Gespeichert: <strong>{gespeicherteSchule.name}</strong>
+                    ✓ Gespeichert: <strong>{gespeicherteSchule.name}</strong>
                     {gespeicherteSchule.schulart && <span style={badgeStyle}>{gespeicherteSchule.schulart}</span>}
                   </div>
                 )}
@@ -418,14 +385,14 @@ export default function ProfilPage() {
                           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{s.name}</div>
                           {s.schulart && <span style={badgeStyle}>{s.schulart}</span>}
                         </div>
-                        {isSelected && <span style={{ fontSize: 18, color: 'var(--primary,#01696f)', flexShrink: 0 }}>\u2713</span>}
+                        {isSelected && <span style={{ fontSize: 18, color: 'var(--primary,#01696f)', flexShrink: 0 }}>✓</span>}
                       </div>
                     )
                   })}
                 </div>
 
                 {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
-                {schuleSaving && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Wird gespeichert\u2026</p>}
+                {schuleSaving && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Wird gespeichert…</p>}
               </>
             )}
           </div>
