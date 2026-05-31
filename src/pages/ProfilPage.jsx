@@ -75,7 +75,6 @@ export default function ProfilPage() {
     setOrtInput(''); setOrtGewaehlt('')
     setSchulen([]); setSchuleId('')
     setOrtMsg(null); setSchuleMsg(null)
-    // RPC-Funktion umgeht das 1000-Zeilen-Limit und liefert nur DISTINCT Orte
     supabase
       .rpc('get_orte_by_bundesland', { bl: bundesland })
       .then(({ data, error }) => {
@@ -119,18 +118,20 @@ export default function ProfilPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  // Vorschläge: startsWith UND contains als Fallback damit auch mittendrin getroffen wird
   const suggestions = ortInput.length > 0
-    ? orte.filter(o => o.toLowerCase().startsWith(ortInput.toLowerCase())).slice(0, 8)
+    ? orte.filter(o => o.toLowerCase().includes(ortInput.toLowerCase())).slice(0, 8)
     : []
 
   const schultypen = [...new Set(schulen.map(s => s.schulart).filter(Boolean))].sort()
   const gefilterteSchulen = schulTypFilter ? schulen.filter(s => s.schulart === schulTypFilter) : schulen
 
+  // FIX: Ort aus Vorschlag wählen → ortGewaehlt setzen damit Schulen sofort laden
   const handleOrtSelect = (o) => {
     setOrtInput(o)
-    setOrtGewaehlt('')
+    setOrtGewaehlt(o)      // <-- war vorher '', Schulen wurden nie geladen
     setShowSuggestions(false)
-    setSchulen([]); setSchuleId('')
+    setSchuleId('')
     setOrtMsg(null); setSchuleMsg(null)
   }
 
@@ -299,7 +300,7 @@ export default function ProfilPage() {
                           style={{
                             padding: '10px 14px', cursor: 'pointer', fontSize: 14,
                             borderBottom: '1px solid var(--border, #f0f0f0)',
-                            background: ortInput === o ? 'oklch(from var(--primary,#01696f) l c h / 0.08)' : 'transparent',
+                            background: ortGewaehlt === o ? 'oklch(from var(--primary,#01696f) l c h / 0.08)' : 'transparent',
                           }}
                         >{o}</li>
                       ))}
@@ -312,7 +313,7 @@ export default function ProfilPage() {
                       borderRadius: 8, marginTop: 2, padding: '10px 14px',
                       fontSize: 13, color: 'var(--text-muted)'
                     }}>
-                      Kein Ort gefunden, der mit „{ortInput}" beginnt.
+                      Kein Ort gefunden für „{ortInput}“.
                     </div>
                   )}
                 </div>
