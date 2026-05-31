@@ -48,6 +48,9 @@ export default function ProfilPage() {
   const [ortMsg, setOrtMsg] = useState(null)
   const ortRef = useRef(null)
 
+  // Merkt sich den Ort aus dem Profil, damit er nach dem Laden der Orte-Liste gesetzt werden kann
+  const pendingOrtRef = useRef('')
+
   const [schulen, setSchulen] = useState([])
   const [loadingSchulen, setLoadingSchulen] = useState(false)
   const [schulTypFilter, setSchulTypFilter] = useState('')
@@ -56,25 +59,39 @@ export default function ProfilPage() {
   const [schuleMsg, setSchuleMsg] = useState(null)
   const [gespeicherteSchule, setGespeicherteSchule] = useState(null)
 
+  // Profil laden: Ort in pendingOrtRef merken, NICHT direkt setzen
+  // (wird erst nach dem Laden der Orte-Liste gesetzt, s.u.)
   useEffect(() => {
     if (!profile) return
     setVorname(profile.vorname || '')
     setNachname(profile.nachname || '')
-    setBundesland(profile.bundesland || '')
-    setOrtGewaehlt(profile.ort || '')
-    setOrtInput(profile.ort || '')
+    pendingOrtRef.current = profile.ort || ''
     setSchuleId(profile.schule_id || '')
+    setBundesland(profile.bundesland || '')
   }, [profile])
+
+  // Wenn Bundesland sich ändert: Orte laden
+  // Beim ersten Laden (Profil) wird pendingOrtRef danach wiederhergestellt
+  // Bei manuellem Bundesland-Wechsel wird Ort geleert
+  const isFirstBundeslandLoad = useRef(true)
 
   useEffect(() => {
     if (!bundesland) {
       setOrte([]); setOrtInput(''); setOrtGewaehlt('')
       setSchulen([]); setSchuleId(''); return
     }
+
+    const isInitial = isFirstBundeslandLoad.current
+    isFirstBundeslandLoad.current = false
+
     setLoadingOrte(true)
-    setOrtInput(''); setOrtGewaehlt('')
-    setSchulen([]); setSchuleId('')
-    setOrtMsg(null); setSchuleMsg(null)
+    // Beim manuellen Wechsel Ort zurücksetzen, beim ersten Laden den pending-Ort behalten
+    if (!isInitial) {
+      setOrtInput(''); setOrtGewaehlt('')
+      setSchulen([]); setSchuleId('')
+      setOrtMsg(null); setSchuleMsg(null)
+    }
+
     supabase
       .rpc('get_orte_by_bundesland', { bl: bundesland })
       .then(({ data, error }) => {
@@ -82,7 +99,18 @@ export default function ProfilPage() {
           console.error('Fehler beim Laden der Orte:', error)
           setOrte([])
         } else {
-          setOrte((data || []).map(r => r.ort).filter(Boolean))
+          const liste = (data || []).map(r => r.ort).filter(Boolean)
+          setOrte(liste)
+
+          // Nach dem ersten Laden: gespeicherten Ort aus Profil wiederherstellen
+          if (isInitial && pendingOrtRef.current) {
+            const gespeichert = liste.find(
+              o => o.toLowerCase() === pendingOrtRef.current.toLowerCase()
+            ) || pendingOrtRef.current
+            setOrtInput(gespeichert)
+            setOrtGewaehlt(gespeichert)
+            pendingOrtRef.current = ''
+          }
         }
         setLoadingOrte(false)
       })
@@ -118,18 +146,17 @@ export default function ProfilPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Vorschläge: startsWith UND contains als Fallback damit auch mittendrin getroffen wird
+  // Suche immer von vorne (startsWith)
   const suggestions = ortInput.length > 0
-    ? orte.filter(o => o.toLowerCase().includes(ortInput.toLowerCase())).slice(0, 8)
+    ? orte.filter(o => o.toLowerCase().startsWith(ortInput.toLowerCase())).slice(0, 8)
     : []
 
   const schultypen = [...new Set(schulen.map(s => s.schulart).filter(Boolean))].sort()
   const gefilterteSchulen = schulTypFilter ? schulen.filter(s => s.schulart === schulTypFilter) : schulen
 
-  // FIX: Ort aus Vorschlag wählen → ortGewaehlt setzen damit Schulen sofort laden
   const handleOrtSelect = (o) => {
     setOrtInput(o)
-    setOrtGewaehlt(o)      // <-- war vorher '', Schulen wurden nie geladen
+    setOrtGewaehlt(o)
     setShowSuggestions(false)
     setSchuleId('')
     setOrtMsg(null); setSchuleMsg(null)
@@ -163,7 +190,7 @@ export default function ProfilPage() {
 
   const handlePwSave = async (e) => {
     e.preventDefault(); setPwMsg(null)
-    if (pwNeu.length < 6) { setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' }); return }
+    if (pwNeu.length < 6) { setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' }); return }\
     if (pwNeu !== pwWdh) { setPwMsg({ ok: false, text: 'Passwörter stimmen nicht überein.' }); return }
     setPwSaving(true)
     const { error } = await supabase.auth.updateUser({ password: pwNeu })
@@ -264,7 +291,7 @@ export default function ProfilPage() {
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Bundesland</label>
             <select className="input" value={bundesland}
-              onChange={e => setBundesland(e.target.value)} style={{ width: '100%' }}>
+              onChange={e => { isFirstBundeslandLoad.current = false; setBundesland(e.target.value) }} style={{ width: '100%' }}>
               <option value="">– Bundesland wählen –</option>
               {BUNDESLAENDER.map(bl => (
                 <option key={bl.kuerzel} value={bl.kuerzel}>{bl.name}</option>
@@ -313,7 +340,7 @@ export default function ProfilPage() {
                       borderRadius: 8, marginTop: 2, padding: '10px 14px',
                       fontSize: 13, color: 'var(--text-muted)'
                     }}>
-                      Kein Ort gefunden für „{ortInput}“.
+                      Kein Ort gefunden für „{ortInput}".
                     </div>
                   )}
                 </div>
