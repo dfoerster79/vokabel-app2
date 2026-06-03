@@ -27,6 +27,8 @@ export default function ProfilPage() {
   const { user } = useAuthStore()
   const { profile, loading: roleLoading } = useRole()
 
+  const [profileInitialized, setProfileInitialized] = useState(false)
+
   const [vorname, setVorname] = useState('')
   const [nachname, setNachname] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
@@ -65,8 +67,10 @@ export default function ProfilPage() {
 
   const ortRef = useRef(null)
 
+  // ─── FIX: Profil erst initialisieren wenn wirklich geladen ───
   useEffect(() => {
-    if (!profile) return
+    if (roleLoading) return       // noch am Laden – noch nichts tun
+    if (!profile) return          // kein Profil vorhanden
 
     setVorname(profile.vorname || '')
     setNachname(profile.nachname || '')
@@ -86,7 +90,9 @@ export default function ProfilPage() {
 
     setEditOrt(!bl || !ort)
     setEditSchule(false)
-  }, [profile])
+
+    setProfileInitialized(true)   // ← erst jetzt freigeben
+  }, [profile, roleLoading])
 
   useEffect(() => {
     if (!savedSchuleId) {
@@ -342,7 +348,8 @@ export default function ProfilPage() {
     setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} ✓` : 'Gespeichert ✓' })
   }
 
-  if (roleLoading) {
+  // ─── FIX: Ladescreen solange Profil nicht initialisiert ───
+  if (roleLoading || !profileInitialized) {
     return (
       <div className="page-center">
         <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -549,7 +556,7 @@ export default function ProfilPage() {
                         fontSize: 13,
                         color: 'var(--text-muted)',
                       }}>
-                        Kein Ort gefunden für „{ortInput}“.
+                        Kein Ort gefunden für „{ortInput}".
                       </div>
                     )}
 
