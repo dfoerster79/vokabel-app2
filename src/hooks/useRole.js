@@ -19,7 +19,7 @@ export function useRole() {
     if (!user) { setLoading(false); return }
     supabase
       .from('profiles')
-      .select('rolle, vorname, nachname')
+      .select('rolle, vorname, nachname, bundesland, ort, schule_id')
       .eq('id', user.id)
       .single()
       .then(({ data, error }) => {
