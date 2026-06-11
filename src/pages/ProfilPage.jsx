@@ -67,10 +67,10 @@ export default function ProfilPage() {
 
   const ortRef = useRef(null)
 
-  // ─── FIX: Profil erst initialisieren wenn wirklich geladen ───
+  // ─── Profil erst initialisieren wenn wirklich geladen ───
   useEffect(() => {
-    if (roleLoading) return       // noch am Laden – noch nichts tun
-    if (!profile) return          // kein Profil vorhanden
+    if (roleLoading) return
+    if (!profile) return
 
     setVorname(profile.vorname || '')
     setNachname(profile.nachname || '')
@@ -91,9 +91,10 @@ export default function ProfilPage() {
     setEditOrt(!bl || !ort)
     setEditSchule(false)
 
-    setProfileInitialized(true)   // ← erst jetzt freigeben
+    setProfileInitialized(true)
   }, [profile, roleLoading])
 
+  // ─── Gespeicherte Schule laden wenn schule_id vorhanden ───
   useEffect(() => {
     if (!savedSchuleId) {
       setGespeicherteSchule(null)
@@ -183,7 +184,9 @@ export default function ProfilPage() {
   const hasSavedOrt = !!savedBundesland && !!savedOrt
   const hasSavedSchule = !!savedSchuleId
   const showOrtEditor = editOrt || !hasSavedOrt
+  // Schulkarte anzeigen sobald ein Ort (gespeichert oder gerade gewählt) vorliegt
   const showSchuleCard = !!(showOrtEditor ? ortGewaehlt : savedOrt)
+  // Schulauswahl zeigen wenn: keine Schule gespeichert, oder gerade editiert wird
   const showSchuleSelection = showSchuleCard && (!hasSavedSchule || editSchule || editOrt)
   const ortAnzeige = savedOrt
   const bundeslandAnzeige = BUNDESLAENDER.find(b => b.kuerzel === savedBundesland)?.name || savedBundesland
@@ -348,7 +351,7 @@ export default function ProfilPage() {
     setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} ✓` : 'Gespeichert ✓' })
   }
 
-  // ─── FIX: Ladescreen solange Profil nicht initialisiert ───
+  // ─── Ladescreen solange Profil nicht initialisiert ───
   if (roleLoading || !profileInitialized) {
     return (
       <div className="page-center">
@@ -377,6 +380,7 @@ export default function ProfilPage() {
           <p>Deine persönlichen Einstellungen verwalten.</p>
         </div>
 
+        {/* ── Name ── */}
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={sectionTitle}>Name</h3>
           <form onSubmit={handleNameSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -411,6 +415,7 @@ export default function ProfilPage() {
           </form>
         </div>
 
+        {/* ── Passwort ── */}
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={sectionTitle}>Passwort ändern</h3>
           <form onSubmit={handlePwSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -445,6 +450,7 @@ export default function ProfilPage() {
           </form>
         </div>
 
+        {/* ── Bundesland & Ort ── */}
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={sectionTitle}>Bundesland &amp; Ort</h3>
 
@@ -612,11 +618,18 @@ export default function ProfilPage() {
           )}
         </div>
 
+        {/* ── Schule ──
+            Logik:
+            - Kein savedSchuleId  → Schulauswahl anzeigen
+            - savedSchuleId vorhanden → gespeicherte Schule + Link "Schule ändern"
+            - Klick auf "Schule ändern" → Schulauswahl einblenden
+        */}
         {showSchuleCard && (
           <div className="card" style={{ marginBottom: 16 }}>
             <h3 style={sectionTitle}>Schule</h3>
 
             {hasSavedSchule && !showSchuleSelection ? (
+              /* ── Gespeicherte Schule anzeigen ── */
               <div>
                 {loadingGespeicherteSchule ? (
                   <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lade Schule…</p>
@@ -654,20 +667,21 @@ export default function ProfilPage() {
                   </div>
                 ) : null}
 
+                {/* Link "Schule ändern" – nur wenn Ort nicht gerade editiert wird */}
                 {!editOrt && (
                   <button
                     type="button"
-                    className="btn"
                     onClick={startSchuleEdit}
-                    style={{ fontSize: 13 }}
+                    style={aenderungsLinkStyle}
                   >
-                    ✎ Schule ändern
+                    🏫 Schule ändern
                   </button>
                 )}
 
                 {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
               </div>
             ) : (
+              /* ── Schulauswahl anzeigen ── */
               <>
                 {editSchule && hasSavedSchule && !editOrt && (
                   <button
@@ -799,4 +813,17 @@ const badgeStyle = {
   fontSize: 11,
   fontWeight: 700,
   letterSpacing: '0.04em',
+}
+
+// Link-artiger Stil für "Schule ändern"
+const aenderungsLinkStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  cursor: 'pointer',
+  fontSize: 13,
+  color: 'var(--primary,#01696f)',
+  textDecoration: 'underline',
+  textUnderlineOffset: 3,
+  fontWeight: 600,
 }
