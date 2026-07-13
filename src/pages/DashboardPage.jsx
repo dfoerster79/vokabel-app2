@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
 
 const menuSchueler = [
-  { icon: '📝', label: 'Neuer Test', desc: 'Vokabelset erstellen', to: '/vokabeln/neu' },
+  { icon: '📝', label: 'Neuer Test', desc: 'Foto-Scan: Vokabeln aus Buch', to: '/neuer-test' },
   { icon: '🎯', label: 'Lernen', desc: 'Vokabeln üben', to: '/lernen' },
   { icon: '📚', label: 'Meine Sets', desc: 'Alle Vokabelsets', to: '/sets' },
   { icon: '🏫', label: 'Mein Kurs', desc: 'Kurseinstellungen', to: '/profil' },
@@ -99,7 +99,7 @@ export default function DashboardPage() {
             <div className="empty-state-icon">📖</div>
             <h3>Noch keine Aktivität</h3>
             <p>Erstelle dein erstes Vokabelset, um loszulegen.</p>
-            <Link to="/vokabeln/neu" className="btn btn-primary" style={{ maxWidth: 220, margin: '0 auto' }}>
+            <Link to="/neuer-test" className="btn btn-primary" style={{ maxWidth: 220, margin: '0 auto' }}>
               Jetzt starten
             </Link>
           </div>
