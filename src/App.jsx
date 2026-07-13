@@ -10,6 +10,7 @@ import SchulenImportPage from './pages/SchulenImportPage.jsx'
 import OrteImportPage from './pages/OrteImportPage.jsx'
 import ProfilPage from './pages/ProfilPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
+import FotoTestPage from './pages/FotoTestPage.jsx'  // NEU
 import { useAuthStore } from './store/authStore.js'
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
       <Route path="/profil-einrichten" element={user ? <ProfileSetupPage /> : <Navigate to="/" />} />
       <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/" />} />
       <Route path="/profil" element={user ? <ProfilPage /> : <Navigate to="/" />} />
+      <Route path="/neuer-test" element={user ? <FotoTestPage /> : <Navigate to="/" />} />  {/* NEU */}
       <Route path="/admin" element={user ? <AdminPage /> : <Navigate to="/" />} />
       <Route path="/admin/schulen" element={user ? <SchulenPage /> : <Navigate to="/" />} />
       <Route path="/admin/faecher" element={user ? <FaecherPage /> : <Navigate to="/" />} />
