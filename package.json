@@ -10,23 +10,23 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@supabase/supabase-js": "latest",
-    "axios": "latest",
-    "lucide-react": "latest",
-    "openai": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "react-hook-form": "latest",
-    "react-router-dom": "latest",
-    "zustand": "latest"
+    "@supabase/supabase-js": "^2.49.4",
+    "axios": "^1.7.9",
+    "lucide-react": "^0.468.0",
+    "openai": "^4.104.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.54.2",
+    "react-router-dom": "^6.28.2",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "eslint": "latest",
-    "vite": "latest",
-    "vite-plugin-pwa": "latest",
-    "vitest": "latest"
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.17.0",
+    "vite": "^5.4.19",
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^2.1.8"
   }
 }
