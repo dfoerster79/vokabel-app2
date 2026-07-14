@@ -68,7 +68,6 @@ export default function ProfilPage() {
 
   const ortRef = useRef(null)
 
-  // ─── Profil erst initialisieren wenn wirklich geladen ───
   useEffect(() => {
     if (roleLoading) return
     if (!profile) return
@@ -95,7 +94,6 @@ export default function ProfilPage() {
     setProfileInitialized(true)
   }, [profile, roleLoading])
 
-  // ─── Gespeicherte Schule laden wenn schule_id vorhanden ───
   useEffect(() => {
     if (!savedSchuleId) {
       setGespeicherteSchule(null)
@@ -185,58 +183,4 @@ export default function ProfilPage() {
   const hasSavedOrt = !!savedBundesland && !!savedOrt
   const hasSavedSchule = !!savedSchuleId
   const showOrtEditor = editOrt || !hasSavedOrt
-  const showSchuleCard = !!(showOrtEditor ? ortGewaehlt : savedOrt)
-  const showSchuleSelection = showSchuleCard && (!hasSavedSchule || editSchule || editOrt)
-  const ortAnzeige = savedOrt
-  const bundeslandAnzeige = BUNDESLAENDER.find(b => b.kuerzel === savedBundesland)?.name || savedBundesland
-
-  const handleOrtSelect = (ort) => {
-    setOrtInput(ort)
-    setOrtGewaehlt(ort)
-    setShowSuggestions(false)
-    setOrtSuggestions([])
-    setSchuleId('')
-    setSchuleMsg(null)
-    setOrtMsg(null)
-  }
-
-  const startOrtEdit = () => {
-    setEditOrt(true)
-    setEditSchule(false)
-    setBundesland(savedBundesland || '')
-    setOrtInput(savedOrt || '')
-    setOrtGewaehlt(savedOrt || '')
-    setSchuleId(savedSchuleId || '')
-    setOrtMsg(null)
-    setSchuleMsg(null)
-  }
-
-  const cancelOrtEdit = () => {
-    setEditOrt(false)
-    setBundesland(savedBundesland || '')
-    setOrtInput(savedOrt || '')
-    setOrtGewaehlt(savedOrt || '')
-    setSchuleId(savedSchuleId || '')
-    setOrtSuggestions([])
-    setShowSuggestions(false)
-    setOrtMsg(null)
-    setSchuleMsg(null)
-  }
-
-  const startSchuleEdit = () => {
-    setEditSchule(true)
-    setEditOrt(false)
-    setBundesland(savedBundesland || '')
-    setOrtInput(savedOrt || '')
-    setOrtGewaehlt(savedOrt || '')
-    setSchuleId(savedSchuleId || '')
-    setSchuleMsg(null)
-  }
-
-  const cancelSchuleEdit = () => {
-    setEditSchule(false)
-    setSchuleId(savedSchuleId || '')
-    setSchuleMsg(null)
-  }
-
-  const handleOrtSave 
+  const showSchuleCard = !!(showOrtEditor 
