@@ -18,9 +18,8 @@ export default function FotoTestPage() {
   const [bild, setBild] = useState(null);
   const [bildPreview, setBildPreview] = useState(null);
   const [scanning, setScanning] = useState(false);
-  const [vokabeln, setVokabeln] = useState([]);
   
-  // Neu für Duplikat-Prüfung:
+  const [vokabeln, setVokabeln] = useState([]);
   const [seitenzahl, setSeitenzahl] = useState("");
   const [existingTestId, setExistingTestId] = useState(null);
   const [existingVokabeln, setExistingVokabeln] = useState([]);
@@ -65,11 +64,11 @@ export default function FotoTestPage() {
       .then(({ data }) => setBuecher(data || []));
   }, [selectedFach, profil]);
 
-  // Prüft ob die Seite in diesem Buch schon existiert
   const checkSeitenzahl = async (sz) => {
     setSeitenzahl(sz);
     if (!sz || !selectedBuch?.id) {
       setExistingTestId(null);
+      setExistingVokabeln([]);
       return;
     }
     const { data: test } = await supabase
@@ -136,9 +135,23 @@ export default function FotoTestPage() {
     setVokabeln(vokabeln.filter((_, i) => i !== index));
   };
 
+  // Vergleicht eine Vokabel mit dem bestehenden Bestand
+  const getVokabelStatus = (vok) => {
+    if (!existingTestId || existingVokabeln.length === 0) return "new"; // Wenn Seite neu ist, ist alles neu
+    
+    const vOriginal = (vok.original || "").trim().toLowerCase();
+    const vUebersetzung = (vok.uebersetzung || "").trim().toLowerCase();
+    
+    const match = existingVokabeln.find(ev => (ev.original || "").trim().toLowerCase() === vOriginal);
+    
+    if (!match) return "new"; // Komplett neu
+    if ((match.uebersetzung || "").trim().toLowerCase() !== vUebersetzung) return "conflict"; // Original existiert, aber Übersetzung weicht ab
+    return "duplicate"; // Existiert exakt so
+  };
+
   const handleSpeichern = async () => {
     setFehler("");
-    let testId = existingTestId; // Falls existent, fügen wir Vokabeln dort hinzu
+    let testId = existingTestId;
 
     if (!testId) {
       let buchId = selectedBuch?.id;
@@ -164,17 +177,22 @@ export default function FotoTestPage() {
       testId = test.id;
     }
 
-    // Neue Vokabeln in DB einfügen
-    const { error: vokError } = await supabase.from("vokabeln").insert(
-      vokabeln.map(v => ({
-        test_id: testId,
-        original: v.original,
-        uebersetzung: v.uebersetzung,
-        beispielsatz: v.beispielsatz || null,
-        ki_unsicher: v.ki_unsicher || false
-      }))
-    );
-    if (vokError) return setFehler("Fehler beim Vokabeln speichern: " + vokError.message);
+    // Nur Vokabeln speichern, die nicht "duplicate" sind
+    const voksToSave = vokabeln.filter(v => getVokabelStatus(v) !== "duplicate");
+    
+    if (voksToSave.length > 0) {
+      const { error: vokError } = await supabase.from("vokabeln").insert(
+        voksToSave.map(v => ({
+          test_id: testId,
+          original: v.original,
+          uebersetzung: v.uebersetzung,
+          beispielsatz: v.beispielsatz || null,
+          ki_unsicher: v.ki_unsicher || false
+        }))
+      );
+      if (vokError) return setFehler("Fehler beim Vokabeln speichern: " + vokError.message);
+    }
+    
     navigate("/dashboard");
   };
 
@@ -198,7 +216,7 @@ export default function FotoTestPage() {
           <p>Fotografiere eine Buchseite und lass die KI die Vokabeln erkennen.</p>
         </div>
 
-        {/* Echter Fortschrittsbalken */}
+        {/* Fortschrittsbalken */}
         <div style={{ position: "relative", display: "flex", justifyContent: "space-between", margin: "24px 0 32px" }}>
           <div style={{ position: "absolute", top: 14, left: "10%", right: "10%", height: 4, background: "#e5e7eb", zIndex: 0, borderRadius: 2 }}></div>
           <div style={{ position: "absolute", top: 14, left: "10%", width: `${((schritt - 1) / 3) * 80}%`, height: 4, background: "var(--primary, #0d9488)", zIndex: 0, borderRadius: 2, transition: "width 0.3s ease" }}></div>
@@ -314,7 +332,6 @@ export default function FotoTestPage() {
                 </div>
               </div>
             )}
-
             <button className="btn btn-secondary" style={{ width: "100%", marginTop: 12 }} onClick={() => setSchritt(1)}>← Zurück</button>
           </div>
         )}
@@ -352,56 +369,88 @@ export default function FotoTestPage() {
         {schritt === 4 && (
           <div>
             <p className="section-title">Vokabeln prüfen & bestätigen</p>
+            
             <div className="card" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ color: "var(--text-muted)", fontSize: 14 }}>Seitenzahl:</span>
               <input value={seitenzahl} onChange={e => checkSeitenzahl(e.target.value)}
                 style={{ width: 70, padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 15, textAlign: "center" }} />
-              <span style={{ color: "var(--text-muted)", fontSize: 13 }}>{vokabeln.length} neue Vokabeln</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 13 }}>{vokabeln.length} erkannt</span>
             </div>
 
-            {/* DUPLIKAT WARNUNG */}
             {existingTestId && (
               <div className="card" style={{ background: "#e0f2fe", border: "1px solid #bae6fd", marginBottom: 16 }}>
                 <h4 style={{ color: "#0369a1", margin: "0 0 8px", fontSize: 15 }}>ℹ️ Diese Seite existiert bereits!</h4>
                 <p style={{ fontSize: 13, margin: "0 0 8px", color: "#075985" }}>
-                  Folgende Vokabeln wurden für Seite {seitenzahl} bereits gespeichert:
+                  Die DB hat bereits {existingVokabeln.length} Vokabeln für Seite {seitenzahl}.
                 </p>
-                <ul style={{ fontSize: 13, color: "#0c4a6e", paddingLeft: 20, margin: 0 }}>
-                  {existingVokabeln.slice(0, 4).map((ev, idx) => (
-                    <li key={idx}><strong>{ev.original}</strong> – {ev.uebersetzung}</li>
-                  ))}
-                  {existingVokabeln.length > 4 && <li>... und {existingVokabeln.length - 4} weitere</li>}
-                </ul>
+                <div style={{ display: "flex", gap: 12, fontSize: 12, marginTop: 8 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{width: 10, height: 10, borderRadius: 2, background: "#dcfce7"}}></div> Neu</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{width: 10, height: 10, borderRadius: 2, background: "#fef08a"}}></div> Abweichung</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{width: 10, height: 10, borderRadius: 2, background: "#f3f4f6"}}></div> Duplikat</span>
+                </div>
               </div>
             )}
 
-            {vokabeln.map((v, i) => (
-              <div key={i} className="card" style={{
-                marginBottom: 8, padding: 12, border: v.ki_unsicher ? "2px solid #FF9800" : "1px solid #e5e7eb",
-                background: v.ki_unsicher ? "#fff8e1" : "white"
-              }}>
-                {v.ki_unsicher && (
-                  <div style={{ color: "#E65100", fontSize: 12, marginBottom: 6 }}>⚠️ Unsicher erkannt – bitte prüfen</div>
-                )}
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input value={v.original} onChange={e => handleVokabelEdit(i, "original", e.target.value)}
-                    style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 14 }} />
-                  <span style={{ color: "#999" }}>→</span>
-                  <input value={v.uebersetzung} onChange={e => handleVokabelEdit(i, "uebersetzung", e.target.value)}
-                    style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 14 }} />
-                  <button onClick={() => handleVokabelDelete(i)}
-                    style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}>
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
+            {vokabeln.map((v, i) => {
+              const status = getVokabelStatus(v);
+              
+              let bgColor = "white";
+              let borderColor = "#e5e7eb";
+              
+              if (v.ki_unsicher) {
+                bgColor = "#fff8e1"; // orange tint
+                borderColor = "#FF9800";
+              } else if (existingTestId) {
+                if (status === "new") {
+                  bgColor = "#dcfce7"; // green tint (new)
+                  borderColor = "#86efac";
+                } else if (status === "conflict") {
+                  bgColor = "#fef08a"; // yellow tint (conflict)
+                  borderColor = "#fde047";
+                } else {
+                  bgColor = "#f3f4f6"; // gray tint (duplicate)
+                  borderColor = "#e5e7eb";
+                }
+              }
 
-            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              return (
+                <div key={i} className="card" style={{
+                  marginBottom: 8, padding: 12, border: `1px solid ${borderColor}`, background: bgColor, opacity: status === "duplicate" ? 0.7 : 1
+                }}>
+                  {v.ki_unsicher && (
+                    <div style={{ color: "#E65100", fontSize: 12, marginBottom: 6 }}>⚠️ Unsicher erkannt – bitte prüfen</div>
+                  )}
+                  {status === "conflict" && (
+                    <div style={{ color: "#a16207", fontSize: 12, marginBottom: 6 }}>
+                      ⚠️ <strong>Abweichung!</strong> Bisherige Übersetzung: <em>{existingVokabeln.find(ev => ev.original.toLowerCase() === v.original.toLowerCase())?.uebersetzung}</em>
+                    </div>
+                  )}
+                  {status === "duplicate" && (
+                    <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>ℹ️ Wird übersprungen (bereits vorhanden)</div>
+                  )}
+                  
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input value={v.original} onChange={e => handleVokabelEdit(i, "original", e.target.value)}
+                      disabled={status === "duplicate"}
+                      style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 14, background: "transparent" }} />
+                    <span style={{ color: "#999" }}>→</span>
+                    <input value={v.uebersetzung} onChange={e => handleVokabelEdit(i, "uebersetzung", e.target.value)}
+                      disabled={status === "duplicate"}
+                      style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 14, background: "transparent" }} />
+                    <button onClick={() => handleVokabelDelete(i)}
+                      style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setSchritt(3)}>← Neues Foto</button>
               <button className="btn btn-primary" style={{ flex: 2, opacity: (vokabeln.length === 0 || !seitenzahl) ? 0.5 : 1 }}
                 disabled={vokabeln.length === 0 || !seitenzahl} onClick={handleSpeichern}>
-                {existingTestId ? "💾 Bestehende Seite aktualisieren" : `💾 Seite ${seitenzahl} speichern`}
+                {existingTestId ? "💾 Aktualisieren" : `💾 Seite ${seitenzahl} speichern`}
               </button>
             </div>
           </div>
