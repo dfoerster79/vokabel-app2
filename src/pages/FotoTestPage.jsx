@@ -31,7 +31,10 @@ export default function FotoTestPage() {
 
   useEffect(() => {
     if (user) {
-      supabase.from("profiles").select("schule_id").eq("id", user.id).single()
+      supabase.from("profiles")
+        .select("schule_id, klasse_pro_fach")
+        .eq("id", user.id)
+        .single()
         .then(({ data }) => setProfil(data));
     }
   }, [user]);
@@ -163,6 +166,11 @@ export default function FotoTestPage() {
         if (error) return setFehler("Fehler beim Buch anlegen: " + error.message);
         buchId = neuesBuch.id;
       }
+      // Auslesen der Klassen-Info für das spezifische Fach
+      const fachInfo = profil?.klasse_pro_fach?.[selectedFach.id] || {};
+      const aktuellerJahrgang = fachInfo.jahrgang || null;
+      const aktuelleKlasse = fachInfo.klasse_name || null;
+
       const { data: test, error: testError } = await supabase
         .from("vokabel_tests")
         .insert({
@@ -170,7 +178,9 @@ export default function FotoTestPage() {
           buch_id: buchId,
           fach_id: selectedFach.id,
           schule_id: profil?.schule_id || null,
-          user_id: user.id
+          user_id: user.id,
+          jahrgang: aktuellerJahrgang,
+          klasse: aktuelleKlasse
         })
         .select().single();
       if (testError) return setFehler("Fehler beim Test anlegen: " + testError.message);
