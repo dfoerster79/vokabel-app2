@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
@@ -27,6 +27,8 @@ const BUNDESLAENDER = [
 export default function ProfilPage() {
   const { user } = useAuthStore()
   const { profile, loading: roleLoading } = useRole()
+  const [searchParams] = useSearchParams()
+  const isSchuljahrUpdate = searchParams.get('update') === 'schuljahr'
 
   const [profileInitialized, setProfileInitialized] = useState(false)
   const [vorname, setVorname] = useState('')
@@ -367,6 +369,24 @@ export default function ProfilPage() {
           <h2>👤 Mein Profil</h2>
           <p>Deine persönlichen Einstellungen verwalten.</p>
         </div>
+                {/* NEU: SCHULJAHR-BANNER */}
+        {isSchuljahrUpdate && (
+          <div style={{
+            background: '#dbeafe', 
+            color: '#0369a1', 
+            padding: '16px', 
+            borderRadius: '12px', 
+            marginBottom: '24px', 
+            border: '2px solid #bae6fd'
+          }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🎉 Willkommen im neuen Schuljahr!
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
+              Bitte scrolle nach unten zur <strong>Klassenverwaltung</strong> und aktualisiere deine Jahrgänge und Klassen für das neue Schuljahr, bevor du weiterlernst.
+            </p>
+          </div>
+        )}
 
         {/* ── Name ── */}
         <div className="card" style={{ marginBottom: 16 }}>
