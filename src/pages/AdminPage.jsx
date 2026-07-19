@@ -9,6 +9,8 @@ const adminSections = [
       { icon: '👤', label: 'Benutzer',  desc: 'Nutzer & Rollen',     to: '/admin/benutzer' },
       { icon: '🏫', label: 'Schulen',  desc: 'Schulen verwalten',  to: '/admin/schulen' },
       { icon: '📚', label: 'Fächer',   desc: 'Fächer & Kurse',     to: '/admin/faecher' },
+      // --- DIESE ZEILE HIER NEU EINFÜGEN ---
+      { icon: '📊', label: 'Statistik',desc: 'Buch- & Fachübersicht',to: '/admin/fachuebersicht' },
       { icon: '⚙️',  label: 'System',   desc: 'App-Einstellungen', to: '/admin/system' },
     ],
   },
