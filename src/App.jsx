@@ -13,6 +13,7 @@ import NotFoundPage from './pages/NotFoundPage.jsx'
 import FotoTestPage from './pages/FotoTestPage.jsx'  // NEU
 import { useAuthStore } from './store/authStore.js'
 import AdminFachuebersichtPage from './pages/AdminFachuebersichtPage.jsx'
+import LernenPage from './pages/LernenPage.jsx'
 
 export default function App() {
   const user = useAuthStore(s => s.user)
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/" />} />
       <Route path="/admin/fachuebersicht" element={<AdminFachuebersichtPage />} />
       <Route path="/profil" element={user ? <ProfilPage /> : <Navigate to="/" />} />
+      <Route path="/lernen" element={<LernenPage />} />
       <Route path="/neuer-test" element={user ? <FotoTestPage /> : <Navigate to="/" />} />  {/* NEU */}
       <Route path="/admin" element={user ? <AdminPage /> : <Navigate to="/" />} />
       <Route path="/admin/schulen" element={user ? <SchulenPage /> : <Navigate to="/" />} />
