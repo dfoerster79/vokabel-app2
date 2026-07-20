@@ -32,6 +32,14 @@ export default function AdminFachuebersichtPage() {
   // Ergebnisse
   const [ergebnisse, setErgebnisse] = useState([])
   const [loadingDaten, setLoadingDaten] = useState(false)
+  const [expandedBooks, setExpandedBooks] = useState({})
+
+  const toggleBook = (buchName) => {
+    setExpandedBooks(prev => ({
+      ...prev,
+      [buchName]: !prev[buchName]
+    }))
+  }
 
   // 1. Admin-Check
   useEffect(() => {
