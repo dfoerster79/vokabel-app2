@@ -179,32 +179,80 @@ export default function AdminFachuebersichtPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {Object.entries(gruppiertNachBuch).map(([buchName, daten]) => (
-                <div key={buchName} className="card" style={{ borderLeft: '4px solid var(--primary)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <h4 style={{ fontSize: 18, margin: '0 0 8px 0', color: 'var(--text)' }}>📚 {buchName}</h4>
-                      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                        Wird an <strong>{daten.schulen.size} Schule(n)</strong> in dieser Filterkombination genutzt.
-                      </p>
-                      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                        <strong>Schulen:</strong> {Array.from(daten.schulen).join(', ')}
+                         {Object.entries(gruppiertNachBuch).map(([buchName, daten]) => {
+                const isExpanded = expandedBooks[buchName]
+
+                return (
+                  <div key={buchName} className="card" style={{ borderLeft: '4px solid var(--primary)', transition: 'all 0.2s' }}>
+                    {/* Der klickbare Header-Bereich */}
+                    <div 
+                      onClick={() => toggleBook(buchName)}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }}
+                    >
+                      <div>
+                        <h4 style={{ fontSize: 18, margin: '0 0 8px 0', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 14, opacity: 0.7 }}>{isExpanded ? '▼' : '▶'}</span> 📚 {buchName}
+                        </h4>
+                        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                          Wird an <strong>{daten.schulen.size} Schule(n)</strong> in dieser Filterkombination genutzt.
+                        </p>
+                        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                          <strong>Schulen:</strong> {Array.from(daten.schulen).join(', ')}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        background: 'var(--bg)', 
+                        padding: '8px 16px', 
+                        borderRadius: 8, 
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        color: 'var(--primary)'
+                      }}>
+                        <div style={{ fontSize: 24 }}>{daten.count}</div>
+                        <div style={{ fontSize: 11, textTransform: 'uppercase' }}>Tests</div>
                       </div>
                     </div>
-                    <div style={{ 
-                      background: 'var(--bg)', 
-                      padding: '8px 16px', 
-                      borderRadius: 8, 
-                      textAlign: 'center',
-                      fontWeight: 'bold',
-                      color: 'var(--primary)'
-                    }}>
-                      <div style={{ fontSize: 24 }}>{daten.count}</div>
-                      <div style={{ fontSize: 11, textTransform: 'uppercase' }}>Tests</div>
-                    </div>
+
+                    {/* Der aufklappbare Detail-Bereich */}
+                    {isExpanded && (
+                      <div style={{ 
+                        marginTop: 20, 
+                        paddingTop: 16, 
+                        borderTop: '1px solid var(--border)',
+                        animation: 'fadeIn 0.3s ease'
+                      }}>
+                        <h5 style={{ margin: '0 0 12px 0', fontSize: 14, color: 'var(--text)' }}>
+                          Erfasste Tests / Seiten für dieses Buch:
+                        </h5>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {daten.tests.map(test => (
+                            <div key={test.id} style={{
+                              padding: '10px 12px',
+                              background: 'var(--bg)',
+                              borderRadius: 6,
+                              fontSize: 13,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              border: '1px solid var(--border)'
+                            }}>
+                              <div>
+                                <strong style={{ color: 'var(--primary)' }}>{test.name}</strong> 
+                                <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>
+                                  (Klasse {test.jahrgang})
+                                </span>
+                              </div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 12, textAlign: 'right' }}>
+                                🏫 {test.schulen?.name || 'Unbekannte Schule'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
