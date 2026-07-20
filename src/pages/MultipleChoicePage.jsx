@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient'; // Pfad zu deiner Supabase-Config ggf. anpassen
+import { supabase } from '../supabaseClient'; // Pfad ggf. anpassen
 
 const MultipleChoicePage = () => {
   const { testId } = useParams();
@@ -8,50 +8,65 @@ const MultipleChoicePage = () => {
 
   // State-Management
   const [vocabList, setVocabList] = useState([]);
+  const [fachId, setFachId] = useState(null); // Neu: fach_id für das Speichern
   const [loading, setLoading] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [options, setOptions] = useState([]);
   const [score, setScore] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
-  const [fehlerListe, setFehlerListe] = useState([]); // Speichert die falsch beantworteten Vokabeln
+  const [fehlerListe, setFehlerListe] = useState([]);
 
   useEffect(() => {
-    fetchVocabs();
+    fetchTestDataAndVocabs();
   }, [testId]);
 
-  // 1. Vokabeln laden
-  const fetchVocabs = async () => {
+  // 1. Fach-ID und Vokabeln laden
+  const fetchTestDataAndVocabs = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('vokabeln') // Tabellenname für deine Vokabeln anpassen
-      .select('*')
-      .eq('vokabel_test_id', testId);
 
-    if (error) {
-      console.error('Fehler beim Laden der Vokabeln:', error.message);
-    } else if (data && data.length > 0) {
-      // Vokabel-Reihenfolge mischen
-      const shuffledVocabs = [...data].sort(() => Math.random() - 0.5);
+    // A) fach_id aus dem Vokabeltest holen
+    const { data: testData, error: testError } = await supabase
+      .from('vokabel_tests')
+      .select('fach_id')
+      .eq('id', testId)
+      .single();
+
+    if (testError) {
+      console.error('Fehler beim Laden der Test-Infos:', testError.message);
+    } else if (testData) {
+      setFachId(testData.fach_id);
+    }
+
+    // B) Vokabeln holen (Spalte heißt test_id)
+    const { data: vocabData, error: vocabError } = await supabase
+      .from('vokabeln')
+      .select('*')
+      .eq('test_id', testId);
+
+    if (vocabError) {
+      console.error('Fehler beim Laden der Vokabeln:', vocabError.message);
+    } else if (vocabData && vocabData.length > 0) {
+      const shuffledVocabs = [...vocabData].sort(() => Math.random() - 0.5);
       setVocabList(shuffledVocabs);
       generateOptions(shuffledVocabs, 0);
     }
     setLoading(false);
   };
 
-  // 2. Multiple-Choice-Antworten generieren (4 Optionen)
+  // 2. Multiple-Choice-Antworten generieren
   const generateOptions = (list, index) => {
     if (index >= list.length) return;
 
     const currentVocab = list[index];
     
-    // 3 zufällige, FALSCHE Antworten aus der restlichen Liste holen
+    // 3 zufällige, FALSCHE Antworten aus der Liste holen
     const incorrectOptions = list
       .filter((v) => v.id !== currentVocab.id)
       .sort(() => Math.random() - 0.5)
       .slice(0, 3)
-      .map(v => v.uebersetzung); // Spaltenname für die deutsche Übersetzung anpassen
+      .map(v => v.uebersetzung);
 
-    // Richtige Antwort hinzufügen und alles mischen
+    // Richtige Antwort hinzufügen und mischen
     const allOptions = [...incorrectOptions, currentVocab.uebersetzung].sort(() => Math.random() - 0.5);
     setOptions(allOptions);
   };
@@ -72,9 +87,7 @@ const MultipleChoicePage = () => {
       setCurrentQuestionIndex(nextIndex);
       generateOptions(vocabList, nextIndex);
     } else {
-      // Test ist fertig
       setIsFinished(true);
-      // Letztes Ergebnis mit übergeben, da der State asynchron updatet
       saveResults(
         isCorrect ? score + 1 : score, 
         isCorrect ? fehlerListe : [...fehlerListe, currentVocab]
@@ -84,11 +97,10 @@ const MultipleChoicePage = () => {
 
   // 3. Ergebnisse in Supabase speichern
   const saveResults = async (finalScore, finalFehlerListe) => {
-    // Aktuellen Nutzer abfragen (wegen auth.uid() Policies wichtig!)
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // A) In 'lern_attempts' speichern
+    // A) In 'lern_attempts' speichern (wir nutzen testId als vokabel_test_id)
     const { data: attemptData, error: attemptError } = await supabase
       .from('lern_attempts')
       .insert([{
@@ -105,23 +117,26 @@ const MultipleChoicePage = () => {
       return;
     }
 
-    const attemptId = attemptData.id;
-
     if (finalFehlerListe.length > 0) {
       // B) In 'lern_attempt_fehler' speichern
       const fehlerInserts = finalFehlerListe.map(v => ({
-        attempt_id: attemptId,
+        attempt_id: attemptData.id,
         vokabel_id: v.id
       }));
       await supabase.from('lern_attempt_fehler').insert(fehlerInserts);
 
-      // C) In 'lern_falsche_woerter' speichern (Upsert, falls das Wort schon mal falsch war)
-      const falscheWoerterInserts = finalFehlerListe.map(v => ({
-        user_id: user.id,
-        vokabel_id: v.id
-      }));
-      // onConflict sorgt dafür, dass bei bestehender Kombi kein Error fliegt, sondern upgedatet wird
-      await supabase.from('lern_falsche_woerter').upsert(falscheWoerterInserts, { onConflict: 'user_id, vokabel_id' });
+      // C) In 'lern_falsche_woerter' speichern - jetzt mit fach_id und neuem Unique-Constraint
+      if (fachId) {
+        const falscheWoerterInserts = finalFehlerListe.map(v => ({
+          user_id: user.id,
+          fach_id: fachId,
+          vokabel_id: v.id
+        }));
+        
+        await supabase
+          .from('lern_falsche_woerter')
+          .upsert(falscheWoerterInserts, { onConflict: 'user_id, fach_id, vokabel_id' });
+      }
     }
   };
 
@@ -156,7 +171,7 @@ const MultipleChoicePage = () => {
       
       {/* Das gesuchte Fremdwort */}
       <h2 className="text-4xl font-extrabold text-center mb-8 text-gray-800">
-        {currentVocab.begriff} 
+        {currentVocab.original} 
       </h2>
 
       <div className="grid grid-cols-1 gap-3">
