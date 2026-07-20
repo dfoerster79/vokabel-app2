@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useRole } from '../hooks/useRole.js'
+import { useAuthStore } from '../store/authStore.js'
 
 const BUNDESLAENDER = [
   { kuerzel: 'BW', name: 'Baden-Württemberg' }, { kuerzel: 'BY', name: 'Bayern' },
@@ -18,8 +19,8 @@ const SCHULARTEN = ['Gymnasium', 'Realschule', 'Mittelschule', 'Gesamtschule', '
 const JAHRGAENGE = [5, 6, 7, 8, 9, 10, 11, 12, 13]
 
 export default function AdminFachuebersichtPage() {
-  const navigate = useNavigate()
-  const { profile, loading: roleLoading } = useRole()
+const { user } = useAuthStore()
+const { rolle, loading: roleLoading } = useRole()
 
   const [faecher, setFaecher] = useState([])
   
@@ -41,13 +42,8 @@ export default function AdminFachuebersichtPage() {
     }))
   }
 
-  // 1. Admin-Check
-  useEffect(() => {
-    if (!roleLoading && profile?.role !== 'admin') {
-      navigate('/dashboard')
-    }
-  }, [profile, roleLoading, navigate])
-
+  const username = user?.user_metadata?.username || user?.email?.split('@')[0]
+  const isAllowed = rolle === 'admin' || username === 'dfoerster'
   // 2. Fächer laden für Dropdown
   useEffect(() => {
     supabase.from('faecher').select('id, name').order('name')
@@ -108,7 +104,8 @@ export default function AdminFachuebersichtPage() {
     return acc
   }, {})
 
-  if (roleLoading) return <div className="page-center">Lade...</div>
+ if (roleLoading) return <div className="page-center">Lade...</div>
+ if (!isAllowed) return <Navigate to="/dashboard" />
 
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
