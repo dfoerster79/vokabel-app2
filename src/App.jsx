@@ -14,6 +14,7 @@ import FotoTestPage from './pages/FotoTestPage.jsx'  // NEU
 import { useAuthStore } from './store/authStore.js'
 import AdminFachuebersichtPage from './pages/AdminFachuebersichtPage.jsx'
 import LernenPage from './pages/LernenPage.jsx'
+import MultipleChoicePage from './pages/MultipleChoicePage'
 
 export default function App() {
   const user = useAuthStore(s => s.user)
@@ -32,6 +33,7 @@ export default function App() {
       <Route path="/admin/faecher" element={user ? <FaecherPage /> : <Navigate to="/" />} />
       <Route path="/admin/schulen-import" element={user ? <SchulenImportPage /> : <Navigate to="/" />} />
       <Route path="/admin/orte-import" element={user ? <OrteImportPage /> : <Navigate to="/" />} />
+      <Route path="/lernen/multiple_choice/:testId" element={<MultipleChoicePage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
