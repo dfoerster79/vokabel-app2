@@ -52,6 +52,30 @@ export default function RanglistePage() {
       return;
     }
 
+    // Wir rufen die neue Datenbank-Funktion (RPC) auf
+    const { data, error } = await supabase.rpc('get_rangliste', {
+      p_fach_id: fach.id,
+      p_schule_id: userProfile.schule_id
+    });
+
+    if (error) {
+      console.error("Fehler beim Laden der Rangliste:", error);
+      setRangliste([]);
+    } else if (data) {
+      // Das fertige Ergebnis ins richtige Format für unsere Anzeige umwandeln
+      const formatierteListe = data.map(row => ({
+        userId: row.user_id,
+        vorname: row.vorname || "Unbekannt",
+        nachname: row.nachname ? row.nachname.charAt(0) + "." : "",
+        punkte: row.punkte,
+        anzahlTests: row.anzahl_tests
+      }));
+      setRangliste(formatierteListe);
+    }
+    
+    setLoadingRangliste(false);
+  };
+
     // 3. Lade alle Versuche für dieses Fach an dieser Schule
     // Wir nutzen hier einen Join zu den Profilen, um sicherzugehen, 
     // dass wir nur Schüler der gleichen Schule (und idealerweise Klasse) vergleichen.
