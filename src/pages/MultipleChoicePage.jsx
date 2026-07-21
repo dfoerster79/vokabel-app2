@@ -19,6 +19,10 @@ const MultipleChoicePage = () => {
   const [isCorrectFeedback, setIsCorrectFeedback] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
 
+  // --- NEU: Zeitmessung ---
+  const [startTime, setStartTime] = useState(null);
+  const [timeStats, setTimeStats] = useState({ total: 0, average: 0 }); // Für die Anzeige am Ende
+
   useEffect(() => {
     fetchTestDataAndVocabs();
   }, [testId]);
@@ -33,6 +37,9 @@ const MultipleChoicePage = () => {
       const shuffledVocabs = [...vocabData].sort(() => Math.random() - 0.5);
       setVocabList(shuffledVocabs);
       generateOptions(shuffledVocabs, 0);
+      
+      // Startzeit setzen, sobald die erste Frage bereit ist
+      setStartTime(Date.now());
     }
     setLoading(false);
   };
@@ -82,17 +89,48 @@ const MultipleChoicePage = () => {
       generateOptions(vocabList, nextIndex);
     } else {
       setIsFinished(true);
-      saveResults(wasCorrect ? score + 1 : score, wasCorrect ? fehlerListe : [...fehlerListe, vocabList[currentQuestionIndex]]);
+      
+      // --- NEU: Zeiten berechnen beim Testende ---
+      const endTime = Date.now();
+      // Wir ziehen die Wartezeit (1500ms pro Frage) ab, damit nur die echte "Denkzeit" zählt
+      const totalPauseTime = vocabList.length * 1500; 
+      const rawTimeTakenMs = endTime - startTime - totalPauseTime;
+      
+      // Falls durch extrem schnelles Klicken negative Werte entstehen (sehr unwahrscheinlich), setzen wir Minimum auf 1 Sekunde
+      const finalTimeTakenSec = Math.max(1, rawTimeTakenMs / 1000); 
+      const averageTimeSec = finalTimeTakenSec / vocabList.length;
+
+      // Stats für den "Test beendet" Screen speichern (auf 1 Nachkommastelle runden)
+      setTimeStats({
+        total: finalTimeTakenSec.toFixed(1),
+        average: averageTimeSec.toFixed(1)
+      });
+
+      // Zeiten an Supabase übergeben
+      saveResults(
+        wasCorrect ? score + 1 : score, 
+        wasCorrect ? fehlerListe : [...fehlerListe, vocabList[currentQuestionIndex]],
+        finalTimeTakenSec,
+        averageTimeSec
+      );
     }
   };
 
-  const saveResults = async (finalScore, finalFehlerListe) => {
+  // --- NEU: saveResults nimmt nun auch die Zeiten entgegen ---
+  const saveResults = async (finalScore, finalFehlerListe, timeTaken, avgTime) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: attemptData } = await supabase.from('lern_attempts').insert([{
-        user_id: user.id, vokabel_test_id: testId, score: finalScore, total_questions: vocabList.length
+    const { data: attemptData, error: attemptError } = await supabase.from('lern_attempts').insert([{
+        user_id: user.id, 
+        vokabel_test_id: testId, 
+        score: finalScore, 
+        total_questions: vocabList.length,
+        time_taken_seconds: timeTaken,        // Neu
+        avg_time_per_word: avgTime            // Neu
     }]).select().single();
+
+    if (attemptError) console.error("Fehler beim Speichern der Zeiten:", attemptError);
 
     if (attemptData && finalFehlerListe.length > 0) {
       const fehlerInserts = finalFehlerListe.map(v => ({ attempt_id: attemptData.id, vokabel_id: v.id }));
@@ -112,15 +150,31 @@ const MultipleChoicePage = () => {
     return (
       <div style={{ maxWidth: '32rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', textAlign: 'center', borderTop: '8px solid #22c55e', fontFamily: 'sans-serif' }}>
         <h2 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#1f2937' }}>Test beendet! 🎉</h2>
-        <div style={{ background: '#f9fafb', padding: '1.5rem', borderRadius: '1rem', marginBottom: '2rem' }}>
+        
+        <div style={{ background: '#f9fafb', padding: '1.5rem', borderRadius: '1rem', marginBottom: '1.5rem' }}>
           <p style={{ fontSize: '1.25rem', margin: '0 0 0.5rem 0', color: '#4b5563' }}>Dein Ergebnis:</p>
           <p style={{ fontSize: '3rem', fontWeight: 'bold', color: '#16a34a', margin: 0 }}>
             {score} <span style={{ fontSize: '1.5rem', color: '#9ca3af' }}>/ {vocabList.length}</span>
           </p>
         </div>
+
+        {/* --- NEU: Anzeige der gemessenen Zeiten --- */}
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+          <div style={{ flex: 1, background: '#f3f4f6', padding: '1rem', borderRadius: '0.75rem' }}>
+            <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.875rem', color: '#6b7280' }}>Gesamtzeit</p>
+            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#374151' }}>{timeStats.total} s</p>
+          </div>
+          <div style={{ flex: 1, background: '#f3f4f6', padding: '1rem', borderRadius: '0.75rem' }}>
+            <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.875rem', color: '#6b7280' }}>Ø pro Wort</p>
+            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#374151' }}>{timeStats.average} s</p>
+          </div>
+        </div>
+
         <button 
           onClick={() => navigate('/lernen')} 
-          style={{ width: '100%', background: '#22c55e', color: 'white', fontSize: '1.25rem', fontWeight: 'bold', padding: '1rem 1.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', marginTop: '1rem' }}
+          style={{ width: '100%', background: '#22c55e', color: 'white', fontSize: '1.25rem', fontWeight: 'bold', padding: '1rem 1.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+          onMouseOver={(e) => e.target.style.background = '#16a34a'}
+          onMouseOut={(e) => e.target.style.background = '#22c55e'}
         >
           Zurück zur Übersicht
         </button>
@@ -131,7 +185,6 @@ const MultipleChoicePage = () => {
   const currentVocab = vocabList[currentQuestionIndex];
   const progressPercentage = ((currentQuestionIndex) / vocabList.length) * 100;
 
-  // Stile für das dynamische Feedback definieren
   let feedbackStyle = { height: '4rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0.75rem', fontWeight: 'bold', fontSize: '1.25rem', opacity: showFeedback ? 1 : 0, transition: 'opacity 0.3s' };
   if (showFeedback) {
     if (isCorrectFeedback) {
@@ -144,7 +197,6 @@ const MultipleChoicePage = () => {
   return (
     <div style={{ maxWidth: '42rem', margin: '2rem auto 5rem', padding: '0 1rem', fontFamily: 'sans-serif' }}>
       
-      {/* Header & Fortschritt */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', fontSize: '1.125rem', fontWeight: '600', color: '#4b5563' }}>
         <span>Frage {currentQuestionIndex + 1} <span style={{ fontSize: '0.875rem', fontWeight: 'normal' }}>- von {vocabList.length}</span></span>
         <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.875rem' }}>Score: {score}</span>
@@ -154,17 +206,14 @@ const MultipleChoicePage = () => {
         <div style={{ backgroundColor: '#22c55e', height: '100%', borderRadius: '9999px', width: `${progressPercentage}%`, transition: 'width 0.3s' }}></div>
       </div>
       
-      {/* Vokabel Karte */}
       <div style={{ background: 'white', borderRadius: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #f3f4f6', padding: '2rem', marginBottom: '2rem', textAlign: 'center', minHeight: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <h2 style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1f2937', margin: 0 }}>{currentVocab.original}</h2>
       </div>
 
-      {/* Feedback Balken */}
       <div style={feedbackStyle}>
         {showFeedback && (isCorrectFeedback ? '✅ Richtig!' : `❌ Falsch! Richtig wäre: ${currentVocab.uebersetzung}`)}
       </div>
 
-      {/* Antwort Buttons */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
         {options.map((option, idx) => {
           
