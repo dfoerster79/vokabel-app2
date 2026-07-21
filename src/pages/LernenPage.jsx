@@ -13,8 +13,8 @@ export default function LernenPage() {
   // Daten
   const [faecher, setFaecher] = useState([])
   const [tests, setTests] = useState([])
-  const [favoriten, setFavoriten] = useState([]) // Speichert die favorisierten Test-IDs
-  const [favoritenDetails, setFavoritenDetails] = useState([]) // Speichert die vollen Infos für die Anzeige oben
+  const [favoriten, setFavoriten] = useState([])
+  const [favoritenDetails, setFavoritenDetails] = useState([])
 
   // Auswahl
   const [gewaehltesFach, setGewaehltesFach] = useState('')
@@ -44,6 +44,26 @@ export default function LernenPage() {
     }
   }, [user])
 
+  
+  useEffect(() => {
+    if (!user) return;
+    fetchFavoriten();
+  }, [user]);
+
+  const fetchFavoriten = async () => {
+    const { data } = await supabase
+      .from('lern_favoriten')
+      .select(`
+        vokabel_test_id,
+        vokabel_tests ( id, name, jahrgang, buecher(name), faecher(id, name) )
+      `)
+      .eq('user_id', user.id);
+
+    if (data) {
+      setFavoriten(data.map(f => f.vokabel_test_id));
+      setFavoritenDetails(data.map(f => f.vokabel_tests).filter(Boolean));
+    }
+  };
   // Funktion zum Laden der Favoriten
   const fetchFavoriten = async () => {
     // Hole die Favoriten des Nutzers inkl. der Test-Details
@@ -106,6 +126,26 @@ export default function LernenPage() {
     setCurrentStep(3) // Geht direkt zur Wahl der Testart
   }
 
+  const handleFavoritStart = (testData) => {
+    setGewaehltesFach(testData.faecher.id);
+    setGewaehlterTest(testData.id);
+    setCurrentStep(3);
+  };
+
+  const toggleFavorit = async (e, testId) => {
+    e.stopPropagation();
+    const isFav = favoriten.includes(testId);
+
+    if (isFav) {
+      setFavoriten(prev => prev.filter(id => id !== testId));
+      await supabase.from('lern_favoriten').delete().eq('user_id', user.id).eq('vokabel_test_id', testId);
+    } else {
+      setFavoriten(prev => [...prev, testId]);
+      await supabase.from('lern_favoriten').insert([{ user_id: user.id, vokabel_test_id: testId }]);
+    }
+    fetchFavoriten();
+  };
+  
   // Stern-Klick zum Favorisieren / Entfavorisieren
   const toggleFavorit = async (e, testId) => {
     e.stopPropagation() // Verhindert, dass der Button auch den Test für Schritt 3 auswählt
