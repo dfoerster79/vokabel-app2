@@ -14,6 +14,7 @@ import FotoTestPage from './pages/FotoTestPage.jsx'  // NEU
 import { useAuthStore } from './store/authStore.js'
 import AdminFachuebersichtPage from './pages/AdminFachuebersichtPage.jsx'
 import LernenPage from './pages/LernenPage.jsx'
+import RanglistePage from './pages/RanglistePage.jsx'
 import MultipleChoicePage from './pages/MultipleChoicePage';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route path="/rangliste" element={<RanglistePage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/profil-einrichten" element={user ? <ProfileSetupPage /> : <Navigate to="/" />} />
       <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/" />} />
