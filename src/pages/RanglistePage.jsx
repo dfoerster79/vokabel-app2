@@ -21,7 +21,6 @@ export default function RanglistePage() {
   const loadInitialData = async () => {
     setLoading(true);
     
-    // 1. Hole Profil des aktuellen Nutzers (für Schule und Klasse)
     if (user) {
       const { data: profile } = await supabase
         .from("profiles")
@@ -32,7 +31,6 @@ export default function RanglistePage() {
       setUserProfile(profile);
     }
 
-    // 2. Lade alle Fächer für die Auswahl
     const { data: faecherData } = await supabase
       .from("faecher")
       .select("*")
@@ -42,7 +40,6 @@ export default function RanglistePage() {
     setLoading(false);
   };
 
-  // Wird aufgerufen, wenn ein Fach angeklickt wird
   const handleFachSelect = async (fach) => {
     setSelectedFach(fach);
     setLoadingRangliste(true);
@@ -52,7 +49,6 @@ export default function RanglistePage() {
       return;
     }
 
-    // Wir rufen die neue Datenbank-Funktion (RPC) auf
     const { data, error } = await supabase.rpc('get_rangliste', {
       p_fach_id: fach.id,
       p_schule_id: userProfile.schule_id
@@ -62,7 +58,6 @@ export default function RanglistePage() {
       console.error("Fehler beim Laden der Rangliste:", error);
       setRangliste([]);
     } else if (data) {
-      // Das fertige Ergebnis ins richtige Format für unsere Anzeige umwandeln
       const formatierteListe = data.map(row => ({
         userId: row.user_id,
         vorname: row.vorname || "Unbekannt",
@@ -104,8 +99,8 @@ export default function RanglistePage() {
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 1rem" }}>
         
-        {/* Header Karte */}
-        <div style={{ backgroundColor: "#0f5156", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+        {/* Header Karte mit modernem Verlauf */}
+        <div style={{ background: "linear-gradient(135deg, #0f5156 0%, #167a7f 100%)", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
           <h2 style={{ margin: 0, color: "white", fontSize: 22, display: "flex", alignItems: "center", gap: 8 }}>
             Vergleiche dich!
           </h2>
@@ -114,39 +109,37 @@ export default function RanglistePage() {
           </p>
         </div>
 
-        {/* Fach-Auswahl */}
-        <div style={{ marginBottom: "2.5rem" }}>
-          <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
-            Fach wählen
+        {/* Wenn KEIN Fach gewählt ist -> Zeige die großen Kacheln */}
+        {!selectedFach ? (
+          <div style={{ marginBottom: "2.5rem" }}>
+            <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
+              Fach wählen
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 15 }}>
+              {faecher.map((fach) => (
+                <button
+                  key={fach.id}
+                  onClick={() => handleFachSelect(fach)}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "white", border: "none", borderRadius: "1rem", padding: "2rem 1rem", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", cursor: "pointer", transition: "transform 0.1s" }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = "scale(0.98)"}
+                  onMouseOut={(e) => e.currentTarget.style.transform = "scale(1)"}
+                >
+                  <span style={{ fontSize: 36 }}>{getFachIcon(fach.name)}</span>
+                  <span style={{ fontSize: 15, fontWeight: "bold", color: "#111827" }}>{fach.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: "10px", scrollbarWidth: "none" }}>
-            {faecher.map((fach) => (
-              <button
-                key={fach.id}
-                onClick={() => handleFachSelect(fach)}
-                style={{ 
-                  flex: "0 0 auto",
-                  padding: "0.75rem 1.25rem", 
-                  background: selectedFach?.id === fach.id ? "#0f5156" : "white", 
-                  color: selectedFach?.id === fach.id ? "white" : "#1f2937",
-                  border: "none", 
-                  borderRadius: "9999px", 
-                  fontWeight: "bold",
-                  display: "flex", alignItems: "center", gap: 8,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.1)", 
-                  cursor: "pointer",
-                  transition: "all 0.2s"
-                }}
-              >
-                <span>{getFachIcon(fach.name)}</span> {fach.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Die eigentliche Rangliste */}
-        {selectedFach && (
+        ) : (
+          /* Wenn EIN Fach gewählt ist -> Zeige die Rangliste */
           <div>
+            <button 
+              onClick={() => { setSelectedFach(null); setRangliste([]); }}
+              style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", marginBottom: "1rem", fontSize: "1rem", display: "flex", alignItems: "center", gap: "4px", padding: 0 }}
+            >
+              ← Zurück zur Fachauswahl
+            </button>
+
             <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
               Topliste {selectedFach.name}
             </div>
