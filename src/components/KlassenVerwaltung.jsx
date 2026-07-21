@@ -19,28 +19,39 @@ export default function KlassenVerwaltung() {
 
   const loadData = async () => {
     setLoading(true);
-    
-    // Fächer laden
-    const { data: faecherData } = await supabase.from('faecher').select('*').order('name');
-    if (faecherData) setFaecher(faecherData);
+    try {
+      // 1. Fächer laden
+      const { data: faecherData } = await supabase.from('faecher').select('*').order('name');
+      if (faecherData) setFaecher(faecherData);
 
-    // Bisherige Klassen laden
-    const { data: profile } = await supabase.from('profiles').select('klasse_pro_fach').eq('id', user.id).single();
-    if (profile?.klasse_pro_fach) {
-      setUserKlassen(profile.klasse_pro_fach);
+      // 2. Bisherige Klassen laden
+      const { data: profile } = await supabase.from('profiles').select('klasse_pro_fach').eq('id', user.id).single();
       
-      // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
-    const ersteKlasse = Object.values(profile.klasse_pro_fach)[0];
-      if (ersteKlasse) {
-        // Zieht die Zahl (z.B. "7") aus "7f" oder "10" aus "10a"
-        const match = ersteKlasse.match(/^(\d+)/);
-        if (match) setGlobalJahrgang(match[1]);
+      // Prüfen, ob Daten da sind und ob es wirklich ein Objekt ist
+      if (profile?.klasse_pro_fach && typeof profile.klasse_pro_fach === 'object') {
+        setUserKlassen(profile.klasse_pro_fach);
+        
+        // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
+        const klassenWerte = Object.values(profile.klasse_pro_fach);
+        if (klassenWerte.length > 0) {
+          const ersteKlasse = String(klassenWerte[0]); // Sicherstellen, dass es ein String ist
+          // Zieht die Zahl (z.B. "7") aus "7f" oder "10" aus "10a"
+          const match = ersteKlasse.match(/^(\d+)/);
+          if (match) setGlobalJahrgang(match[1]);
+        }
+      } else {
+        // Falls in der DB nichts steht (oder etwas kaputt ist), setze es leer
+        setUserKlassen({});
       }
+    } catch (err) {
+      console.error("Fehler beim Laden der Klassen:", err);
+      // Wenn es knallt, setzen wir wenigstens ein leeres Objekt, damit die Seite lädt
+      setUserKlassen({}); 
+    } finally {
+      // Das WICHTIGSTE: Egal ob Erfolg oder Fehler, das Laden MUSS beendet werden!
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
-
   // Wird aufgerufen, wenn man den Zusatz (z.B. "f") ändert
   const handleZusatzChange = (fachId, zusatz) => {
     // Erzwingt Kleinschreibung direkt bei der Eingabe
