@@ -3,32 +3,26 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
 import { useAuthStore } from "../store/authStore.js";
 
-// Farben aus deinen Screenshots
-const BRAND_COLOR = "#0f5156"; // Dunkles Tannengrün
-const BRAND_LIGHT = "#ccfbf1"; // Heller Schein für die Stepper-Kreise
-const BRAND_TEXT = "#4b5563"; 
+const BRAND_COLOR = "#0f5156";
+const BRAND_LIGHT = "#ccfbf1";
 
 export default function LernenPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  // Daten
   const [faecher, setFaecher] = useState([]);
   const [tests, setTests] = useState([]);
   const [favoriten, setFavoriten] = useState([]);
   const [favoritenDetails, setFavoritenDetails] = useState([]);
 
-  // Auswahl
   const [gewaehltesFach, setGewaehltesFach] = useState(null);
   const [gewaehlterTest, setGewaehlterTest] = useState(null);
   const [testart, setTestart] = useState("multiple_choice");
 
-  // UI States
   const [currentStep, setCurrentStep] = useState(1);
   const [loadingFaecher, setLoadingFaecher] = useState(true);
   const [loadingTests, setLoadingTests] = useState(false);
 
-  // 1. Initiale Daten laden
   useEffect(() => {
     supabase
       .from("faecher")
@@ -59,7 +53,6 @@ export default function LernenPage() {
     }
   };
 
-  // 2. Tests laden, wenn Fach gewählt
   useEffect(() => {
     if (!gewaehltesFach) return;
     setLoadingTests(true);
@@ -75,7 +68,6 @@ export default function LernenPage() {
       });
   }, [gewaehltesFach]);
 
-  // --- Handlers ---
   const handleFachSelect = (fach) => {
     setGewaehltesFach(fach);
     setGewaehlterTest(null);
@@ -127,7 +119,7 @@ export default function LernenPage() {
     return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", paddingBottom: "5rem", fontFamily: "sans-serif" }}>
       
-      {/* --- NEU: Menüleiste ganz oben --- */}
+      {/* Menüleiste ganz oben */}
       <div style={{ backgroundColor: "white", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb", marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", fontSize: "1.2rem", color: "#0f5156" }}>
           📚 VokabelApp
@@ -139,12 +131,11 @@ export default function LernenPage() {
           Abbrechen
         </button>
       </div>
-      {/* ------------------------------- */}
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 1rem" }}>
         
-        {/* 1) Große grüne Karte als Header */}
-        <div style={{ backgroundColor: "#0f5156", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2.5rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+        {/* 1) Große grüne Karte als Header MIT VERLAUF */}
+        <div style={{ background: "linear-gradient(135deg, #0f5156 0%, #167a7f 100%)", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2.5rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
           <h2 style={{ margin: 0, color: "white", fontSize: 22, display: "flex", alignItems: "center", gap: 8 }}>
             🧠 Lern-Modus
           </h2>
@@ -153,7 +144,7 @@ export default function LernenPage() {
           </p>
         </div>
         
-        {/* 2) Stepper */}
+        {/* 2) Stepper (Dunkle Kreise mit hellem Schein) */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3rem", position: "relative" }}>
           {/* Graue Linie im Hintergrund */}
           <div style={{ position: "absolute", top: 15, left: "15%", right: "15%", height: 2, backgroundColor: "#e5e7eb", zIndex: 0 }} />
