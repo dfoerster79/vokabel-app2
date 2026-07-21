@@ -24,7 +24,7 @@ const rolleConfig = {
   admin: { label: 'Admin', badgeClass: 'badge-admin', menu: menuSchueler, greeting: 'Was möchtest du heute lernen?' },
 }
 
-// Hilfsfunktion: Datum formatieren (z.B. "Heute, 14:30" oder "Gestern, 09:15" oder "12.04.2024")
+// Hilfsfunktion: Datum formatieren
 const formatActivityDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -63,6 +63,10 @@ export default function DashboardPage() {
 
   const config = rolleConfig[rolle] || rolleConfig.schueler
   const vorname = profile?.vorname || user?.user_metadata?.vorname || user?.email?.split('@')[0] || 'Willkommen'
+  
+  // Deine Original-Logik für den Admin-Check
+  const username = user?.user_metadata?.username || user?.email?.split('@')[0]
+  const showAdminLink = rolle === 'admin' || username === 'dfoerster'
 
   useEffect(() => {
     if (user) {
@@ -72,18 +76,11 @@ export default function DashboardPage() {
 
   const loadRecentActivities = async () => {
     setLoadingActivities(true);
-    // Wir laden die letzten 5 Versuche aus lern_attempts inkl. Fach- und Test-Name
     const { data, error } = await supabase
       .from('lern_attempts')
       .select(`
-        id,
-        created_at,
-        correct_count,
-        question_count,
-        percent_correct,
-        time_taken_seconds,
-        faecher(name),
-        vokabel_tests(name)
+        id, created_at, correct_count, question_count, percent_correct, time_taken_seconds,
+        faecher(name), vokabel_tests(name)
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -115,22 +112,38 @@ export default function DashboardPage() {
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 1rem" }}>
         
-        {/* Begrüßungs-Karte */}
+        {/* Begrüßungs-Karte mit Verlauf */}
         <div style={{ background: "linear-gradient(135deg, #0f5156 0%, #167a7f 100%)", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
             <h1 style={{ margin: 0, color: "white", fontSize: 24, fontWeight: "800" }}>
               Hallo {vorname}! 👋
             </h1>
-            <span style={{ background: "rgba(255,255,255,0.2)", color: "white", padding: "4px 10px", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: "bold", textTransform: "uppercase" }}>
-              {config.label}
-            </span>
+            
+            {/* Deine Admin/Rollen Logik */}
+            {showAdminLink ? (
+              <Link 
+                to="/admin" 
+                style={{ textDecoration: 'none', background: "rgba(255,255,255,0.2)", color: "white", padding: "4px 10px", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: "bold", textTransform: "uppercase" }}
+              >
+                Admin
+              </Link>
+            ) : (
+              <span style={{ background: "rgba(255,255,255,0.2)", color: "white", padding: "4px 10px", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: "bold", textTransform: "uppercase" }}>
+                {config.label}
+              </span>
+            )}
           </div>
-          <p style={{ color: "#e5e7eb", margin: 0, fontSize: 14, lineHeight: 1.5 }}>
+          <p style={{ color: "#e5e7eb", margin: "0 0 1rem 0", fontSize: 14, lineHeight: 1.5 }}>
             {config.greeting}
           </p>
+          
+          {/* Der Link zum Profil */}
+          <Link to="/profil" style={{ color: "#2dd4bf", fontSize: "0.875rem", textDecoration: "none", fontWeight: "600", display: "inline-block" }}>
+            Profil verwalten ➔
+          </Link>
         </div>
 
-        {/* Schnellzugriff (Das Grid mit den Buttons) */}
+        {/* Schnellzugriff */}
         <div style={{ marginBottom: "2.5rem" }}>
           <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
             Schnellzugriff
@@ -154,7 +167,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Letzte Aktivitäten (Echte Daten aus der DB) */}
+        {/* Letzte Aktivitäten */}
         <div>
           <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
             Letzte Aktivität
