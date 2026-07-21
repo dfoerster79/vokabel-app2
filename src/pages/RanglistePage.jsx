@@ -76,54 +76,6 @@ export default function RanglistePage() {
     setLoadingRangliste(false);
   };
 
-    // 3. Lade alle Versuche für dieses Fach an dieser Schule
-    // Wir nutzen hier einen Join zu den Profilen, um sicherzugehen, 
-    // dass wir nur Schüler der gleichen Schule (und idealerweise Klasse) vergleichen.
-    
-    const { data: attempts, error } = await supabase
-      .from("lern_attempts")
-      .select(`
-        user_id,
-        correct_count,
-        profiles!inner(id, vorname, nachname, schule_id)
-      `)
-      .eq("fach_id", fach.id)
-      .eq("profiles.schule_id", userProfile.schule_id);
-
-    if (error || !attempts) {
-      console.error("Fehler beim Laden der Rangliste:", error);
-      setRangliste([]);
-      setLoadingRangliste(false);
-      return;
-    }
-
-    // 4. Punkte pro Nutzer zusammenrechnen
-    const punkteProNutzer = {};
-
-    attempts.forEach(attempt => {
-      const uId = attempt.user_id;
-      if (!punkteProNutzer[uId]) {
-        // Initiale Anlage des Nutzers im Objekt
-        punkteProNutzer[uId] = {
-          userId: uId,
-          vorname: attempt.profiles.vorname || "Unbekannt",
-          nachname: attempt.profiles.nachname ? attempt.profiles.nachname.charAt(0) + "." : "",
-          punkte: 0,
-          anzahlTests: 0
-        };
-      }
-      // Punkte addieren
-      punkteProNutzer[uId].punkte += (attempt.correct_count || 0);
-      punkteProNutzer[uId].anzahlTests += 1;
-    });
-
-    // 5. In ein Array umwandeln und nach Punkten sortieren
-    const sortierteListe = Object.values(punkteProNutzer).sort((a, b) => b.punkte - a.punkte);
-    
-    setRangliste(sortierteListe);
-    setLoadingRangliste(false);
-  };
-
   const getFachIcon = (name) => {
     const n = name.toLowerCase();
     if (n.includes("englisch")) return "🇬🇧";
@@ -134,8 +86,7 @@ export default function RanglistePage() {
   };
 
   if (loading) return <div style={{ padding: "2rem", textAlign: "center", color: "#6b7280" }}>Lade Daten...</div>;
-
-  return (
+    return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", paddingBottom: "5rem", fontFamily: "sans-serif" }}>
       
       {/* Menüleiste */}
