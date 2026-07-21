@@ -53,20 +53,41 @@ export default function LernenPage() {
     }
   };
 
+  // 2. Tests laden, wenn Fach gewählt (GEFILTERT NACH SCHULE)
   useEffect(() => {
-    if (!gewaehltesFach) return;
-    setLoadingTests(true);
-    supabase
-      .from("vokabel_tests")
-      .select("id, name, jahrgang, buecher(name)")
-      .eq("fach_id", gewaehltesFach.id)
-      .order("jahrgang")
-      .order("name")
-      .then(({ data }) => {
-        setTests(data || []);
-        setLoadingTests(false);
-      });
-  }, [gewaehltesFach]);
+    if (!gewaehltesFach || !user) return;
+    
+    const fetchTests = async () => {
+      setLoadingTests(true);
+
+      // 1. Zuerst die Schule des aktuellen Nutzers holen
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('schule_id')
+        .eq('id', user.id)
+        .single();
+
+      const userSchuleId = profile?.schule_id;
+
+      // 2. Tests laden und nach Fach UND Schule filtern
+      let query = supabase
+        .from('vokabel_tests')
+        .select('id, name, jahrgang, buecher(name)')
+        .eq('fach_id', gewaehltesFach);
+
+      // Nur nach Schule filtern, wenn der User auch eine Schule hinterlegt hat
+      if (userSchuleId) {
+        query = query.eq('schule_id', userSchuleId);
+      }
+
+      const { data } = await query.order('jahrgang').order('name');
+      
+      setTests(data || []);
+      setLoadingTests(false);
+    };
+
+    fetchTests();
+  }, [gewaehltesFach, user]);
 
   const handleFachSelect = (fach) => {
     setGewaehltesFach(fach);
