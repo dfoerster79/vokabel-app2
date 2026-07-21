@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useRole } from '../hooks/useRole.js'
@@ -28,6 +28,8 @@ export default function ProfilPage() {
   const { user } = useAuthStore()
   const { profile, loading: roleLoading } = useRole()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  
   const isSchuljahrUpdate = searchParams.get('update') === 'schuljahr'
 
   const [profileInitialized, setProfileInitialized] = useState(false)
@@ -35,13 +37,16 @@ export default function ProfilPage() {
   const [nachname, setNachname] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameMsg, setNameMsg] = useState(null)
+
   const [pwNeu, setPwNeu] = useState('')
   const [pwWdh, setPwWdh] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState(null)
+
   const [savedBundesland, setSavedBundesland] = useState('')
   const [savedOrt, setSavedOrt] = useState('')
   const [savedSchuleId, setSavedSchuleId] = useState('')
+
   const [bundesland, setBundesland] = useState('')
   const [ortInput, setOrtInput] = useState('')
   const [ortGewaehlt, setOrtGewaehlt] = useState('')
@@ -50,14 +55,17 @@ export default function ProfilPage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [ortSaving, setOrtSaving] = useState(false)
   const [ortMsg, setOrtMsg] = useState(null)
+
   const [schulen, setSchulen] = useState([])
   const [loadingSchulen, setLoadingSchulen] = useState(false)
   const [schulTypFilter, setSchulTypFilter] = useState('')
   const [schuleId, setSchuleId] = useState('')
   const [schuleSaving, setSchuleSaving] = useState(false)
   const [schuleMsg, setSchuleMsg] = useState(null)
+  
   const [gespeicherteSchule, setGespeicherteSchule] = useState(null)
   const [loadingGespeicherteSchule, setLoadingGespeicherteSchule] = useState(false)
+
   const [editOrt, setEditOrt] = useState(false)
   const [editSchule, setEditSchule] = useState(false)
 
@@ -85,7 +93,6 @@ export default function ProfilPage() {
 
     setEditOrt(!bl || !ort)
     setEditSchule(false)
-
     setProfileInitialized(true)
   }, [profile, roleLoading])
 
@@ -94,7 +101,6 @@ export default function ProfilPage() {
       setGespeicherteSchule(null)
       return
     }
-
     setLoadingGespeicherteSchule(true)
     supabase
       .from('schulen')
@@ -112,10 +118,8 @@ export default function ProfilPage() {
       if (ortInput.trim().length < 1) setOrtSuggestions([])
       return
     }
-
     const timeout = setTimeout(async () => {
       setLoadingOrte(true)
-
       const { data, error } = await supabase
         .from('schulen')
         .select('ort')
@@ -132,10 +136,8 @@ export default function ProfilPage() {
       } else {
         setOrtSuggestions([])
       }
-
       setLoadingOrte(false)
     }, 220)
-
     return () => clearTimeout(timeout)
   }, [ortInput, bundesland, ortGewaehlt])
 
@@ -148,10 +150,8 @@ export default function ProfilPage() {
       setSchulTypFilter('')
       return
     }
-
     setLoadingSchulen(true)
     setSchulTypFilter('')
-
     supabase
       .from('schulen')
       .select('id, name, schulart')
@@ -177,9 +177,11 @@ export default function ProfilPage() {
 
   const hasSavedOrt = !!savedBundesland && !!savedOrt
   const hasSavedSchule = !!savedSchuleId
+
   const showOrtEditor = editOrt || !hasSavedOrt
   const showSchuleCard = !!(showOrtEditor ? ortGewaehlt : savedOrt)
   const showSchuleSelection = showSchuleCard && (!hasSavedSchule || editSchule || editOrt)
+
   const ortAnzeige = savedOrt
   const bundeslandAnzeige = BUNDESLAENDER.find(b => b.kuerzel === savedBundesland)?.name || savedBundesland
 
@@ -241,22 +243,18 @@ export default function ProfilPage() {
       setOrtMsg({ ok: false, text: 'Bitte einen Ort aus den Vorschlägen auswählen.' })
       return
     }
-
     setOrtSaving(true)
     setOrtMsg(null)
-
     const { error } = await supabase
       .from('profiles')
       .update({ bundesland, ort: ortGewaehlt, schule_id: null })
       .eq('id', user.id)
 
     setOrtSaving(false)
-
     if (error) {
       setOrtMsg({ ok: false, text: error.message })
       return
     }
-
     setSavedBundesland(bundesland)
     setSavedOrt(ortGewaehlt)
     setSavedSchuleId('')
@@ -274,15 +272,12 @@ export default function ProfilPage() {
       setNameMsg({ ok: false, text: 'Vorname darf nicht leer sein.' })
       return
     }
-
     setNameSaving(true)
     setNameMsg(null)
-
     const { error } = await supabase
       .from('profiles')
       .update({ vorname: vorname.trim(), nachname: nachname.trim() })
       .eq('id', user.id)
-
     setNameSaving(false)
     setNameMsg(error ? { ok: false, text: error.message } : { ok: true, text: 'Name gespeichert ✓' })
   }
@@ -290,7 +285,6 @@ export default function ProfilPage() {
   const handlePwSave = async (e) => {
     e.preventDefault()
     setPwMsg(null)
-
     if (pwNeu.length < 6) {
       setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' })
       return
@@ -299,16 +293,13 @@ export default function ProfilPage() {
       setPwMsg({ ok: false, text: 'Passwörter stimmen nicht überein.' })
       return
     }
-
     setPwSaving(true)
     const { error } = await supabase.auth.updateUser({ password: pwNeu })
     setPwSaving(false)
-
     if (error) {
       setPwMsg({ ok: false, text: error.message })
       return
     }
-
     setPwMsg({ ok: true, text: 'Passwort geändert ✓' })
     setPwNeu('')
     setPwWdh('')
@@ -316,521 +307,332 @@ export default function ProfilPage() {
 
   const handleSchuleSave = async (schuleIdParam) => {
     const id = schuleIdParam || schuleId
-
     setSchuleSaving(true)
     setSchuleMsg(null)
-
     const { error } = await supabase
       .from('profiles')
       .update({ schule_id: id || null })
       .eq('id', user.id)
-
+      
     setSchuleSaving(false)
-
     if (error) {
       setSchuleMsg({ ok: false, text: error.message })
       return
     }
-
     setSchuleId(id)
     setSavedSchuleId(id)
-
     const ortFuerAnzeige = editOrt ? ortGewaehlt : savedOrt
     const s = schulen.find(s => String(s.id) === String(id))
     setGespeicherteSchule(s ? { ...s, ort: ortFuerAnzeige } : null)
-
     setEditSchule(false)
     setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} ✓` : 'Gespeichert ✓' })
   }
 
   if (roleLoading || !profileInitialized) {
-    return (
-      <div className="page-center">
-        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-          <p>Lade...</p>
-        </div>
-      </div>
-    )
+    return <div style={{ padding: 20, textAlign: 'center' }}>Lade Profil...</div>
   }
-    return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
-      <nav className="nav">
-        <Link to="/dashboard" className="nav-logo">
-          <div className="nav-logo-icon">📚</div>VokabelApp
-        </Link>
-        <div className="nav-actions">
-          <Link to="/dashboard" className="nav-btn">← Dashboard</Link>
-        </div>
-      </nav>
+    const inputStyle = {
+    display: 'block',
+    width: '100%',
+    padding: '0.75rem',
+    borderRadius: '0.5rem',
+    border: '1px solid #d1d5db',
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    fontSize: '1rem',
+    boxSizing: 'border-box',
+    marginBottom: '1rem'
+  }
 
-      <div className="main-content">
-        <div className="welcome-banner" style={{ marginBottom: 24 }}>
-          <h2>👤 Mein Profil</h2>
-          <p>Deine persönlichen Einstellungen verwalten.</p>
-        </div>
-                {/* NEU: SCHULJAHR-BANNER */}
+  const labelStyle = {
+    display: 'block',
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  }
+
+  const sectionTitle = {
+    fontSize: 18,
+    fontWeight: 700,
+    marginBottom: 14,
+    color: '#111827',
+  }
+
+  const badgeStyle = {
+    display: 'inline-block',
+    marginLeft: 6,
+    marginTop: 3,
+    background: '#ccfbf1',
+    color: '#0f5156',
+    borderRadius: 4,
+    padding: '2px 8px',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+  }
+
+  const aenderungsLinkStyle = {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    fontSize: 13,
+    color: '#0f5156',
+    textDecoration: 'underline',
+    textUnderlineOffset: 3,
+    fontWeight: 600,
+  }
+
+  return (
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", paddingBottom: "5rem", fontFamily: "sans-serif" }}>
+      
+      {/* --- Menüleiste --- */}
+      <div style={{ backgroundColor: "white", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb", marginBottom: "1.5rem" }}>
+        <h1 style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", fontSize: "1.2rem", color: "#0f5156", margin: 0 }}>
+          Profil
+        </h1>
+        <button 
+          onClick={() => navigate('/dashboard')}
+          style={{ background: "none", border: "none", color: "#6b7280", fontSize: "0.9rem", cursor: "pointer", fontWeight: "600" }}
+        >
+          Zurück
+        </button>
+      </div>
+
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 1rem' }}>
+
         {isSchuljahrUpdate && (
-          <div style={{
-            background: '#dbeafe', 
-            color: '#0369a1', 
-            padding: '16px', 
-            borderRadius: '12px', 
-            marginBottom: '24px', 
-            border: '2px solid #bae6fd'
-          }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              🎉 Willkommen im neuen Schuljahr!
-            </h3>
-            <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
-              Bitte scrolle nach unten zur <strong>Klassenverwaltung</strong> und aktualisiere deine Jahrgänge und Klassen für das neue Schuljahr, bevor du weiterlernst.
-            </p>
+          <div style={{ background: '#ccfbf1', border: '1px solid #2dd4bf', borderRadius: '1rem', padding: 15, marginBottom: 20, color: '#0f5156' }}>
+            <strong style={{ display: 'block', marginBottom: 5 }}>Neues Schuljahr! 🚀</strong>
+            Bitte scrolle nach unten zur <strong>Klassenverwaltung</strong> und aktualisiere deine Jahrgänge und Klassen für das neue Schuljahr, bevor du weiterlernst.
           </div>
         )}
 
-        {/* ── Name ── */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={sectionTitle}>Name</h3>
-          <form onSubmit={handleNameSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
+        {/* --- NAME ÄNDERN --- */}
+        <div style={{ background: 'white', padding: "1.5rem", borderRadius: "1rem", marginBottom: "1.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+          <h2 style={sectionTitle}>Persönliche Daten</h2>
+          <form onSubmit={handleNameSave}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Vorname</label>
                 <input
-                  className="input"
                   type="text"
                   value={vorname}
-                  onChange={e => setVorname(e.target.value)}
+                  onChange={(e) => setVorname(e.target.value)}
+                  style={inputStyle}
                   placeholder="Vorname"
-                  style={{ width: '100%' }}
                 />
               </div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Nachname</label>
                 <input
-                  className="input"
                   type="text"
                   value={nachname}
-                  onChange={e => setNachname(e.target.value)}
+                  onChange={(e) => setNachname(e.target.value)}
+                  style={inputStyle}
                   placeholder="Nachname"
-                  style={{ width: '100%' }}
                 />
               </div>
             </div>
-            {nameMsg && <Msg msg={nameMsg} />}
-            <button className="btn btn-primary" type="submit" disabled={nameSaving} style={{ alignSelf: 'flex-start' }}>
-              {nameSaving ? 'Speichern…' : 'Name speichern'}
+            <button
+              type="submit"
+              disabled={nameSaving}
+              style={{ width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              {nameSaving ? 'Speichert...' : 'Name speichern'}
             </button>
+            {nameMsg && (
+              <div style={{ marginTop: 10, fontSize: 13, color: nameMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
+                {nameMsg.text}
+              </div>
+            )}
           </form>
         </div>
 
-        {/* ── Passwort ── */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={sectionTitle}>Passwort ändern</h3>
-          <form onSubmit={handlePwSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Neues Passwort</label>
-              <input
-                className="input"
-                type="password"
-                value={pwNeu}
-                onChange={e => setPwNeu(e.target.value)}
-                placeholder="Mindestens 6 Zeichen"
-                style={{ width: '100%' }}
-                autoComplete="new-password"
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Passwort wiederholen</label>
-              <input
-                className="input"
-                type="password"
-                value={pwWdh}
-                onChange={e => setPwWdh(e.target.value)}
-                placeholder="Passwort bestätigen"
-                style={{ width: '100%' }}
-                autoComplete="new-password"
-              />
-            </div>
-            {pwMsg && <Msg msg={pwMsg} />}
-            <button className="btn btn-primary" type="submit" disabled={pwSaving} style={{ alignSelf: 'flex-start' }}>
-              {pwSaving ? 'Speichern…' : 'Passwort ändern'}
+        {/* --- PASSWORT ÄNDERN --- */}
+        <div style={{ background: 'white', padding: "1.5rem", borderRadius: "1rem", marginBottom: "1.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+          <h2 style={sectionTitle}>Passwort ändern</h2>
+          <form onSubmit={handlePwSave}>
+            <label style={labelStyle}>Neues Passwort</label>
+            <input
+              type="password"
+              value={pwNeu}
+              onChange={(e) => setPwNeu(e.target.value)}
+              placeholder="Mindestens 6 Zeichen"
+              style={inputStyle}
+            />
+            <label style={labelStyle}>Passwort wiederholen</label>
+            <input
+              type="password"
+              value={pwWdh}
+              onChange={(e) => setPwWdh(e.target.value)}
+              placeholder="Passwort bestätigen"
+              style={inputStyle}
+            />
+            <button
+              type="submit"
+              disabled={pwSaving}
+              style={{ width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              {pwSaving ? 'Speichert...' : 'Passwort ändern'}
             </button>
+            {pwMsg && (
+              <div style={{ marginTop: 10, fontSize: 13, color: pwMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
+                {pwMsg.text}
+              </div>
+            )}
           </form>
         </div>
 
-        {/* ── Bundesland & Ort ── */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={sectionTitle}>Bundesland &amp; Ort</h3>
+        {/* --- SCHULE ÄNDERN --- */}
+        <div style={{ background: 'white', padding: "1.5rem", borderRadius: "1rem", marginBottom: "1.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#111827' }}>Meine Schule</h2>
+            {hasSavedSchule && !editSchule && !editOrt && (
+              <button onClick={startSchuleEdit} style={aenderungsLinkStyle}>Schule ändern</button>
+            )}
+          </div>
 
+          {/* 1) BUNDESLAND & ORT */}
           {showOrtEditor ? (
-            <>
-              <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>Bundesland</label>
-                <select
-                  className="input"
-                  value={bundesland}
-                  onChange={e => {
-                    setBundesland(e.target.value)
-                    setOrtInput('')
+            <div style={{ marginBottom: 20, padding: 15, background: '#f8fafc', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+              <h3 style={{ fontSize: 13, margin: '0 0 10px 0', color: '#4b5563' }}>Bundesland & Ort festlegen</h3>
+              <label style={labelStyle}>Bundesland</label>
+              <select
+                value={bundesland}
+                onChange={(e) => {
+                  setBundesland(e.target.value)
+                  setOrtInput('')
+                  setOrtGewaehlt('')
+                  setSchuleId('')
+                  setOrtSuggestions([])
+                }}
+                style={inputStyle}
+              >
+                <option value="">-- Bitte wählen --</option>
+                {BUNDESLAENDER.map(b => <option key={b.kuerzel} value={b.kuerzel}>{b.name}</option>)}
+              </select>
+
+              <div style={{ position: 'relative' }} ref={ortRef}>
+                <label style={labelStyle}>Ort / Stadt</label>
+                <input
+                  type="text"
+                  value={ortInput}
+                  onChange={(e) => {
+                    setOrtInput(e.target.value)
                     setOrtGewaehlt('')
-                    setOrtSuggestions([])
                     setSchuleId('')
-                    setOrtMsg(null)
-                    setSchuleMsg(null)
                   }}
-                  style={{ width: '100%' }}
-                >
-                  <option value="">– Bundesland wählen –</option>
-                  {BUNDESLAENDER.map(bl => (
-                    <option key={bl.kuerzel} value={bl.kuerzel}>{bl.name}</option>
-                  ))}
-                </select>
+                  onFocus={() => { if (ortSuggestions.length > 0) setShowSuggestions(true) }}
+                  placeholder={bundesland ? "Ort tippen..." : "Erst Bundesland wählen"}
+                  disabled={!bundesland}
+                  style={inputStyle}
+                />
+                {loadingOrte && <div style={{ fontSize: 12, color: '#6b7280', marginTop: -5, marginBottom: 10 }}>Suche...</div>}
+                {showSuggestions && ortSuggestions.length > 0 && (
+                  <ul style={{ position: 'absolute', top: 65, left: 0, right: 0, background: 'white', border: '1px solid #d1d5db', borderRadius: 8, maxHeight: 200, overflowY: 'auto', margin: 0, padding: 0, listStyle: 'none', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                    <li style={{ padding: '8px 12px', fontSize: 11, background: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}>Ort aus der Liste wählen</li>
+                    {ortSuggestions.map(o => (
+                      <li
+                        key={o}
+                        onClick={() => handleOrtSelect(o)}
+                        style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', color: '#1f2937' }}
+                      >
+                        {o}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
-              {bundesland && (
-                <div style={{ marginBottom: 14 }}>
-                  <label style={labelStyle}>Ort / Stadt</label>
-                  <div ref={ortRef} style={{ position: 'relative' }}>
-                    <input
-                      className="input"
-                      placeholder="Ort suchen…"
-                      value={ortInput}
-                      onChange={e => {
-                        setOrtInput(e.target.value)
-                        setOrtGewaehlt('')
-                        setShowSuggestions(true)
-                        setSchuleId('')
-                        setSchuleMsg(null)
-                      }}
-                      onFocus={() => ortInput.length >= 1 && setShowSuggestions(true)}
-                      style={{ width: '100%' }}
-                      autoComplete="off"
-                    />
-                    {loadingOrte && (
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Suche…</p>
-                    )}
-
-                    {showSuggestions && ortSuggestions.length > 0 && (
-                      <ul style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 100,
-                        background: 'var(--surface,#fff)',
-                        border: '1px solid var(--border,#e0e0e0)',
-                        borderRadius: 8,
-                        marginTop: 2,
-                        padding: 0,
-                        listStyle: 'none',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                        maxHeight: 220,
-                        overflowY: 'auto',
-                      }}>
-                        {ortSuggestions.map(o => (
-                          <li
-                            key={o}
-                            onMouseDown={() => handleOrtSelect(o)}
-                            style={{
-                              padding: '10px 14px',
-                              cursor: 'pointer',
-                              fontSize: 14,
-                              borderBottom: '1px solid var(--border,#f0f0f0)',
-                              background: ortGewaehlt === o
-                                ? 'oklch(from var(--primary,#01696f) l c h / 0.08)'
-                                : 'transparent',
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.background = 'oklch(from var(--primary,#01696f) l c h / 0.07)'
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.background = ortGewaehlt === o
-                                ? 'oklch(from var(--primary,#01696f) l c h / 0.08)'
-                                : 'transparent'
-                            }}
-                          >
-                            {o}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {showSuggestions && !loadingOrte && ortInput.length >= 1 && ortSuggestions.length === 0 && ortGewaehlt !== ortInput && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 100,
-                        background: 'var(--surface,#fff)',
-                        border: '1px solid var(--border,#e0e0e0)',
-                        borderRadius: 8,
-                        marginTop: 2,
-                        padding: '10px 14px',
-                        fontSize: 13,
-                        color: 'var(--text-muted)',
-                      }}>
-                        Kein Ort gefunden für „{ortInput}".
-                      </div>
-                    )}
-
-                    {ortInput && !ortGewaehlt && (
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                        Ort aus der Liste wählen
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {ortMsg && <div style={{ marginBottom: 10 }}><Msg msg={ortMsg} /></div>}
-
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {bundesland && ortGewaehlt && (
-                  <button className="btn btn-primary" type="button" onClick={handleOrtSave} disabled={ortSaving}>
-                    {ortSaving ? 'Speichern…' : 'Ort speichern'}
-                  </button>
-                )}
-                {hasSavedOrt && editOrt && (
-                  <button className="btn" type="button" onClick={cancelOrtEdit}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={handleOrtSave} disabled={ortSaving} style={{ flex: 1, padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                  {ortSaving ? 'Speichert...' : 'Ort bestätigen'}
+                </button>
+                {hasSavedOrt && (
+                  <button onClick={cancelOrtEdit} style={{ padding: '0.75rem', background: 'white', color: '#4b5563', border: '1px solid #d1d5db', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
                     Abbrechen
                   </button>
                 )}
               </div>
-            </>
+              {ortMsg && <div style={{ marginTop: 10, fontSize: 13, color: ortMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{ortMsg.text}</div>}
+            </div>
           ) : (
-            <div style={{
-              padding: '12px 14px',
-              borderRadius: 10,
-              border: '2px solid var(--primary,#01696f)',
-              background: 'oklch(from var(--primary,#01696f) l c h / 0.07)',
-            }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
-                Gespeicherter Ort
+            <div style={{ marginBottom: 15 }}>
+              <div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>
+                {ortAnzeige} <span style={{ color: '#6b7280', fontWeight: 'normal' }}>({bundeslandAnzeige})</span>
               </div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
-                {ortAnzeige}
-              </div>
-              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-                {bundeslandAnzeige}
-              </div>
-              <button
-                type="button"
-                className="btn"
-                onClick={startOrtEdit}
-                style={{ marginTop: 12, fontSize: 13 }}
-              >
-                ✎ Ort ändern
-              </button>
+              <button onClick={startOrtEdit} style={{ ...aenderungsLinkStyle, fontSize: 12, marginTop: 4 }}>Ort/Bundesland ändern</button>
             </div>
           )}
-        </div>
 
-        {/* ── Schule ── */}
-        {showSchuleCard && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <h3 style={sectionTitle}>Schule</h3>
-
-            {hasSavedSchule && !showSchuleSelection ? (
-              /* ── Gespeicherte Schule anzeigen ── */
-              <div>
-                {loadingGespeicherteSchule ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lade Schule…</p>
-                ) : gespeicherteSchule ? (
-                  <div style={{
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    border: '2px solid var(--primary,#01696f)',
-                    background: 'oklch(from var(--primary,#01696f) l c h / 0.07)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    marginBottom: 12,
-                  }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
-                        Deine Schule
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
-                        {gespeicherteSchule.name}
-                      </div>
-                      <div style={{ marginTop: 4, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {gespeicherteSchule.schulart && (
-                          <span style={badgeStyle}>{gespeicherteSchule.schulart}</span>
-                        )}
-                        {gespeicherteSchule.ort && (
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                            {gespeicherteSchule.ort}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 22, color: 'var(--primary,#01696f)', flexShrink: 0 }}>✓</span>
-                  </div>
-                ) : null}
-
-                {!editOrt && (
-                  <button
-                    type="button"
-                    onClick={startSchuleEdit}
-                    style={aenderungsLinkStyle}
-                  >
-                    🏫 Schule ändern
-                  </button>
-                )}
-
-                {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
-              </div>
-            ) : (
-              /* ── Schulauswahl anzeigen ── */
-              <>
-                {editSchule && hasSavedSchule && !editOrt && (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={cancelSchuleEdit}
-                    style={{ fontSize: 13, marginBottom: 14 }}
-                  >
-                    ← Abbrechen
-                  </button>
-                )}
-
-                {loadingSchulen ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Schulen werden geladen…</p>
+          {/* 2) SCHULE WÄHLEN */}
+          {showSchuleCard && (
+            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 15 }}>
+              {showSchuleSelection ? (
+                loadingSchulen ? (
+                  <div style={{ fontSize: 13, color: '#9ca3af' }}>Schulen werden geladen...</div>
                 ) : schulen.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Keine Schulen für diesen Ort gefunden.</p>
+                  <div style={{ fontSize: 13, color: '#ef4444' }}>Keine Schulen für diesen Ort gefunden.</div>
                 ) : (
                   <>
                     {schulen.length > 3 && schultypen.length > 1 && (
-                      <div style={{ marginBottom: 12 }}>
-                        <label style={labelStyle}>Schultyp filtern</label>
-                        <select
-                          className="input"
-                          value={schulTypFilter}
-                          onChange={e => setSchulTypFilter(e.target.value)}
-                          style={{ width: '100%' }}
-                        >
-                          <option value="">Alle Schultypen ({schulen.length})</option>
-                          {schultypen.map(t => (
-                            <option key={t} value={t}>
-                              {t} ({schulen.filter(s => s.schulart === t).length})
-                            </option>
-                          ))}
+                      <div style={{ marginBottom: 10 }}>
+                        <label style={labelStyle}>Schulform filtern (optional)</label>
+                        <select value={schulTypFilter} onChange={(e) => setSchulTypFilter(e.target.value)} style={inputStyle}>
+                          <option value="">Alle Schulformen</option>
+                          {schultypen.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {gefilterteSchulen.map(s => {
-                        const isSelected = String(s.id) === String(schuleId || savedSchuleId)
-                        return (
-                          <div
-                            key={s.id}
-                            onClick={() => handleSchuleSave(s.id)}
-                            style={{
-                              padding: '12px 14px',
-                              borderRadius: 10,
-                              cursor: 'pointer',
-                              border: isSelected
-                                ? '2px solid var(--primary,#01696f)'
-                                : '1px solid var(--border,#e0e0e0)',
-                              background: isSelected
-                                ? 'oklch(from var(--primary,#01696f) l c h / 0.07)'
-                                : 'var(--surface,#fff)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: 10,
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{s.name}</div>
-                              {s.schulart && <span style={badgeStyle}>{s.schulart}</span>}
-                            </div>
-                            {isSelected && <span style={{ fontSize: 18, color: 'var(--primary,#01696f)', flexShrink: 0 }}>✓</span>}
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
-                    {schuleSaving && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Wird gespeichert…</p>}
+                    <label style={labelStyle}>Schule wählen</label>
+                    <select
+                      value={schuleId}
+                      onChange={(e) => {
+                        setSchuleId(e.target.value)
+                        handleSchuleSave(e.target.value)
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="">-- Bitte wähle deine Schule --</option>
+                      {gefilterteSchulen.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.schulart})</option>
+                      ))}
+                    </select>
+                    
+                    {hasSavedSchule && (
+                      <button onClick={cancelSchuleEdit} style={{ marginTop: 10, padding: '0.5rem', background: 'transparent', color: '#6b7280', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>
+                        Abbrechen
+                      </button>
+                    )}
+                    {schuleSaving && <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 10 }}>Wird gespeichert...</div>}
                   </>
-                )}
-              </>
-            )}
-          </div>
-        )}
+                )
+              ) : (
+                loadingGespeicherteSchule ? (
+                  <div style={{ fontSize: 13, color: '#9ca3af' }}>Lade Schule...</div>
+                ) : gespeicherteSchule ? (
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{gespeicherteSchule.name}</div>
+                    <div style={badgeStyle}>{gespeicherteSchule.schulart}</div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: '#ef4444' }}>Fehler beim Laden der Schule</div>
+                )
+              )}
+              {schuleMsg && <div style={{ marginTop: 10, fontSize: 13, color: schuleMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{schuleMsg.text}</div>}
+            </div>
+          )}
+        </div>
 
-        {/* ── NEU: KLASSENVERWALTUNG ── */}
-        {profileInitialized && (
-          <KlassenVerwaltung />
-        )}
+        {/* --- KLASSENVERWALTUNG COMPONENT --- */}
+        <KlassenVerwaltung />
 
       </div>
     </div>
   )
-}
-
-function Msg({ msg }) {
-  return (
-    <p style={{
-      fontSize: 13,
-      padding: '7px 12px',
-      borderRadius: 8,
-      background: msg.ok
-        ? 'oklch(from var(--primary,#01696f) l c h / 0.10)'
-        : 'oklch(from var(--error,#a12c7b) l c h / 0.08)',
-      color: msg.ok ? 'var(--primary,#01696f)' : 'var(--error,#a12c7b)',
-      border: msg.ok
-        ? '1px solid oklch(from var(--primary,#01696f) l c h / 0.25)'
-        : '1px solid oklch(from var(--error,#a12c7b) l c h / 0.25)',
-    }}>
-      {msg.text}
-    </p>
-  )
-}
-
-const labelStyle = {
-  display: 'block',
-  fontSize: 12,
-  color: 'var(--text-muted)',
-  marginBottom: 4,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-}
-
-const sectionTitle = {
-  fontSize: 15,
-  fontWeight: 700,
-  marginBottom: 14,
-  color: 'var(--text)',
-}
-
-const badgeStyle = {
-  display: 'inline-block',
-  marginLeft: 6,
-  marginTop: 3,
-  background: 'oklch(from var(--primary,#01696f) l c h / 0.10)',
-  color: 'var(--primary,#01696f)',
-  borderRadius: 4,
-  padding: '1px 7px',
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.04em',
-}
-
-const aenderungsLinkStyle = {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  cursor: 'pointer',
-  fontSize: 13,
-  color: 'var(--primary,#01696f)',
-  textDecoration: 'underline',
-  textUnderlineOffset: 3,
-  fontWeight: 600,
 }
