@@ -5,7 +5,6 @@ import { useAuthStore } from '../store/authStore.js'
 
 const BRAND_COLOR = '#0f5156'
 const BRAND_LIGHT = '#e6f0f1'
-
 export default function LernenPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -26,9 +25,8 @@ export default function LernenPage() {
   const [loadingFaecher, setLoadingFaecher] = useState(true)
   const [loadingTests, setLoadingTests] = useState(false)
 
-  // 1. Initiale Daten laden: Fächer UND Favoriten
+  // 1. Initiale Daten laden
   useEffect(() => {
-    // Fächer laden
     supabase
       .from('faecher')
       .select('id, name')
@@ -38,12 +36,10 @@ export default function LernenPage() {
         setLoadingFaecher(false)
       })
 
-    // Favoriten laden
     if (user) {
       fetchFavoriten()
     }
   }, [user])
-
 
   const fetchFavoriten = async () => {
     const { data } = await supabase
@@ -93,11 +89,10 @@ export default function LernenPage() {
     navigate(`/lernen/${testart}/${gewaehlterTest}`)
   }
 
-  // Schnellstart von Favoriten überspringt Schritt 1 & 2
   const handleFavoritStart = (testData) => {
     setGewaehltesFach(testData.faecher.id)
     setGewaehlterTest(testData.id)
-    setCurrentStep(3) // Geht direkt zur Wahl der Testart
+    setCurrentStep(3) 
   }
 
   const toggleFavorit = async (e, testId) => {
@@ -113,11 +108,9 @@ export default function LernenPage() {
     }
     fetchFavoriten();
   };
-  
 
   if (loadingFaecher) return <div style={{ padding: '2rem', textAlign: 'center' }}>Lade Daten...</div>
-
-  return (
+    return (
     <div style={{ maxWidth: '42rem', margin: '2rem auto 5rem', padding: '0 1rem', fontFamily: 'sans-serif' }}>
       
       {/* Headerbereich */}
@@ -126,12 +119,10 @@ export default function LernenPage() {
         <p style={{ color: '#4b5563', margin: 0, fontSize: '1.1rem' }}>Wähle dein Fach und die Lektion, die du heute trainieren möchtest.</p>
       </div>
 
-      {/* --- NEU: FAVORITEN SCHNELLZUGRIFF --- */}
+      {/* --- FAVORITEN SCHNELLZUGRIFF --- */}
       {favoritenDetails.length > 0 && currentStep === 1 && (
         <div style={{ marginBottom: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.25rem', color: '#374151', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ⭐ Deine Favoriten
-          </h2>
+          <h2 style={{ fontSize: '1.25rem', color: '#374151', margin: '0 0 1rem 0' }}>⭐ Deine Favoriten</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {favoritenDetails.map(fav => (
               <button
@@ -140,15 +131,12 @@ export default function LernenPage() {
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   background: 'white', border: `1px solid ${BRAND_LIGHT}`, borderRadius: '0.75rem',
-                  padding: '1rem', cursor: 'pointer', textAlign: 'left',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)', transition: 'all 0.2s'
+                  padding: '1rem', cursor: 'pointer', textAlign: 'left'
                 }}
-                onMouseOver={(e) => { e.currentTarget.style.borderColor = BRAND_COLOR; e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseOut={(e) => { e.currentTarget.style.borderColor = BRAND_LIGHT; e.currentTarget.style.transform = 'translateY(0)' }}
               >
                 <div>
                   <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '1.1rem' }}>{fav.name}</div>
-                  <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                     {fav.faecher?.name} • {fav.buecher?.name || 'Kein Buch'}
                   </div>
                 </div>
@@ -160,7 +148,6 @@ export default function LernenPage() {
           </div>
         </div>
       )}
-
 
       {/* Stepper Navigation */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
@@ -179,8 +166,6 @@ export default function LernenPage() {
                 key={fach.id}
                 onClick={() => handleFachSelect(fach.id)}
                 style={{ padding: '1.5rem', background: 'white', border: `2px solid ${gewaehltesFach === fach.id ? BRAND_COLOR : '#e5e7eb'}`, borderRadius: '1rem', fontSize: '1.25rem', fontWeight: '600', color: gewaehltesFach === fach.id ? BRAND_COLOR : '#374151', cursor: 'pointer', transition: 'all 0.2s', boxShadow: gewaehltesFach === fach.id ? `0 4px 14px -3px ${BRAND_COLOR}40` : 'none' }}
-                onMouseOver={(e) => { if(gewaehltesFach !== fach.id) e.currentTarget.style.borderColor = BRAND_LIGHT }}
-                onMouseOut={(e) => { if(gewaehltesFach !== fach.id) e.currentTarget.style.borderColor = '#e5e7eb' }}
               >
                 {fach.name}
               </button>
@@ -206,21 +191,17 @@ export default function LernenPage() {
               {tests.map(test => {
                 const isFav = favoriten.includes(test.id)
                 return (
-                  <div 
-                    key={test.id} 
-                    style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
-                  >
+                  <div key={test.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    
+                    {/* Stern-Button */}
                     <button
                       onClick={(e) => toggleFavorit(e, test.id)}
-                      title={isFav ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
-                      style={{ background: 'white', border: '2px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.5rem', fontSize: '1.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                      onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                      onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      style={{ background: 'white', border: '2px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.5rem', fontSize: '1.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
-                      {/* Gelber Stern, wenn favorisiert, ansonsten blasser/grauer Stern */}
                       <span style={{ filter: isFav ? 'none' : 'grayscale(100%) opacity(0.3)' }}>⭐</span>
                     </button>
 
+                    {/* Dein originaler Lektion-Button */}
                     <button
                       onClick={() => handleTestSelect(test.id)}
                       style={{ flex: 1, padding: '1rem 1.25rem', background: 'white', border: `2px solid ${gewaehlterTest === test.id ? BRAND_COLOR : '#e5e7eb'}`, borderRadius: '0.75rem', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column' }}
@@ -248,10 +229,9 @@ export default function LernenPage() {
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '2rem' }}>
               
-              {/* Option 1: Multiple Choice */}
               <button
                 onClick={() => setTestart('multiple_choice')}
-                style={{ padding: '1.25rem', background: 'white', border: `2px solid ${testart === 'multiple_choice' ? BRAND_COLOR : 'transparent'}`, borderRadius: '0.75rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s' }}
+                style={{ padding: '1.25rem', background: 'white', border: `2px solid ${testart === 'multiple_choice' ? BRAND_COLOR : 'transparent'}`, borderRadius: '0.75rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem' }}
               >
                 <div style={{ fontSize: '2rem' }}>📝</div>
                 <div>
@@ -260,7 +240,6 @@ export default function LernenPage() {
                 </div>
               </button>
 
-              {/* Option 2: Karteikarten (Noch inaktiv für dieses Beispiel, aber im UI) */}
               <button
                 disabled
                 style={{ padding: '1.25rem', background: 'white', border: '2px solid transparent', borderRadius: '0.75rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.6 }}
@@ -272,25 +251,11 @@ export default function LernenPage() {
                 </div>
               </button>
 
-              {/* Option 3: Schreiben */}
-              <button
-                disabled
-                style={{ padding: '1.25rem', background: 'white', border: '2px solid transparent', borderRadius: '0.75rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.6 }}
-              >
-                <div style={{ fontSize: '2rem' }}>⌨️</div>
-                <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1f2937' }}>Tippen <span style={{ fontSize: '0.75rem', background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px' }}>Bald</span></div>
-                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Schreibe die exakte Übersetzung</div>
-                </div>
-              </button>
-
             </div>
 
             <button
               onClick={handleStart}
-              style={{ width: '100%', padding: '1.25rem', background: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '1.25rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 6px -1px rgba(15,81,86,0.2)' }}
-              onMouseOver={(e) => e.currentTarget.style.background = '#0a3d41'}
-              onMouseOut={(e) => e.currentTarget.style.background = BRAND_COLOR}
+              style={{ width: '100%', padding: '1.25rem', background: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '1.25rem', fontWeight: 'bold', cursor: 'pointer' }}
             >
               Starten 🚀
             </button>
