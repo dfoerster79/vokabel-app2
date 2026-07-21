@@ -3,9 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
 
-// Hardcoded Farben, passend zu Ihrem Foto-Test Screenshot
-const BRAND_COLOR = '#0f5156' // Das dunkle Tannengrün
-const BRAND_LIGHT = '#e6f0f1' // Sehr helles Tannengrün für Hover/Active Backgrounds
+const BRAND_COLOR = '#0f5156'
+const BRAND_LIGHT = '#e6f0f1'
 
 export default function LernenPage() {
   const navigate = useNavigate()
@@ -14,19 +13,22 @@ export default function LernenPage() {
   // Daten
   const [faecher, setFaecher] = useState([])
   const [tests, setTests] = useState([])
-  
+  const [favoriten, setFavoriten] = useState([]) // Speichert die favorisierten Test-IDs
+  const [favoritenDetails, setFavoritenDetails] = useState([]) // Speichert die vollen Infos für die Anzeige oben
+
   // Auswahl
   const [gewaehltesFach, setGewaehltesFach] = useState('')
   const [gewaehlterTest, setGewaehlterTest] = useState('')
   const [testart, setTestart] = useState('multiple_choice')
-  
+
   // UI States
   const [currentStep, setCurrentStep] = useState(1)
   const [loadingFaecher, setLoadingFaecher] = useState(true)
   const [loadingTests, setLoadingTests] = useState(false)
 
-  // 1. Fächer laden
+  // 1. Initiale Daten laden: Fächer UND Favoriten
   useEffect(() => {
+    // Fächer laden
     supabase
       .from('faecher')
       .select('id, name')
@@ -35,12 +37,38 @@ export default function LernenPage() {
         setFaecher(data || [])
         setLoadingFaecher(false)
       })
-  }, [])
+
+    // Favoriten laden
+    if (user) {
+      fetchFavoriten()
+    }
+  }, [user])
+
+  // Funktion zum Laden der Favoriten
+  const fetchFavoriten = async () => {
+    // Hole die Favoriten des Nutzers inkl. der Test-Details
+    const { data } = await supabase
+      .from('lern_favoriten')
+      .select(`
+        vokabel_test_id,
+        vokabel_tests (
+          id, name, jahrgang, buecher(name),
+          faecher(id, name)
+        )
+      `)
+      .eq('user_id', user.id)
+
+    if (data) {
+      // Array der reinen IDs (für den gelben/grauen Stern im Lektionen-Listing)
+      setFavoriten(data.map(f => f.vokabel_test_id))
+      // Volles Array für den Schnellstart-Bereich ganz oben
+      setFavoritenDetails(data.map(f => f.vokabel_tests).filter(Boolean))
+    }
+  }
 
   // 2. Tests laden, wenn Fach gewählt
   useEffect(() => {
     if (!gewaehltesFach) return
-    
     setLoadingTests(true)
     supabase
       .from('vokabel_tests')
@@ -54,10 +82,10 @@ export default function LernenPage() {
       })
   }, [gewaehltesFach])
 
-  // Handlers
+  // --- Handlers ---
   const handleFachSelect = (fachId) => {
     setGewaehltesFach(fachId)
-    setGewaehlterTest('') 
+    setGewaehlterTest('')
     setCurrentStep(2)
   }
 
@@ -71,235 +99,215 @@ export default function LernenPage() {
     navigate(`/lernen/${testart}/${gewaehlterTest}`)
   }
 
-  if (loadingFaecher) return <div className="page-center">Lade Lernbereich...</div>
+  // Schnellstart von Favoriten überspringt Schritt 1 & 2
+  const handleFavoritStart = (testData) => {
+    setGewaehltesFach(testData.faecher.id)
+    setGewaehlterTest(testData.id)
+    setCurrentStep(3) // Geht direkt zur Wahl der Testart
+  }
+
+  // Stern-Klick zum Favorisieren / Entfavorisieren
+  const toggleFavorit = async (e, testId) => {
+    e.stopPropagation() // Verhindert, dass der Button auch den Test für Schritt 3 auswählt
+
+    const isFav = favoriten.includes(testId)
+
+    if (isFav) {
+      // Entfernen
+      setFavoriten(prev => prev.filter(id => id !== testId))
+      await supabase.from('lern_favoriten').delete().eq('user_id', user.id).eq('vokabel_test_id', testId)
+    } else {
+      // Hinzufügen
+      setFavoriten(prev => [...prev, testId])
+      await supabase.from('lern_favoriten').insert([{ user_id: user.id, vokabel_test_id: testId }])
+    }
+    // Lade Details neu, damit der Bereich oben aktualisiert wird
+    fetchFavoriten()
+  }
+
+  if (loadingFaecher) return <div style={{ padding: '2rem', textAlign: 'center' }}>Lade Daten...</div>
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#f8fafc', paddingBottom: 60 }}>
-      {/* Navbar - Cleaner weißer Header */}
-      <div style={{ background: '#fff', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: BRAND_COLOR, fontWeight: '700', fontSize: 18 }}>
-          📚 VokabelApp
-        </Link>
-        <Link to="/dashboard" style={{ color: '#64748b', fontSize: 14, textDecoration: 'none' }}>
-          Abbrechen
-        </Link>
+    <div style={{ maxWidth: '42rem', margin: '2rem auto 5rem', padding: '0 1rem', fontFamily: 'sans-serif' }}>
+      
+      {/* Headerbereich */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: '800', color: BRAND_COLOR, margin: '0 0 0.5rem 0' }}>Lernen</h1>
+        <p style={{ color: '#4b5563', margin: 0, fontSize: '1.1rem' }}>Wähle dein Fach und die Lektion, die du heute trainieren möchtest.</p>
       </div>
 
-      <div style={{ padding: '20px', maxWidth: 600, margin: '0 auto' }}>
-        
-        {/* Dunkelgrüne Info-Box wie im Screenshot */}
-        <div style={{ 
-          background: BRAND_COLOR, 
-          borderRadius: 16, 
-          padding: 24, 
-          color: 'white',
-          marginBottom: 32,
-          boxShadow: '0 4px 12px rgba(15, 81, 86, 0.15)'
-        }}>
-          <h2 style={{ margin: '0 0 8px 0', fontSize: 20, display: 'flex', alignItems: 'center', gap: 8, fontWeight: '700' }}>
-            🧠 Lern-Modus
+      {/* --- NEU: FAVORITEN SCHNELLZUGRIFF --- */}
+      {favoritenDetails.length > 0 && currentStep === 1 && (
+        <div style={{ marginBottom: '2.5rem' }}>
+          <h2 style={{ fontSize: '1.25rem', color: '#374151', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            ⭐ Deine Favoriten
           </h2>
-          <p style={{ margin: 0, fontSize: 15, opacity: 0.9, lineHeight: 1.4 }}>
-            Wähle dein Fach und die Lektion, die du heute trainieren möchtest.
-          </p>
-        </div>
-
-        {/* Horizontaler Stepper - Exakt wie im Foto-Test */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40, position: 'relative', padding: '0 10px' }}>
-          
-          {/* Graue Linie */}
-          <div style={{ position: 'absolute', top: 16, left: 30, right: 30, height: 2, background: '#e2e8f0', zIndex: 0 }} />
-          {/* Aktive Linie */}
-          <div style={{ 
-            position: 'absolute', top: 16, left: 30, height: 2, background: BRAND_COLOR, zIndex: 1,
-            width: currentStep === 1 ? '0%' : currentStep === 2 ? '50%' : '100%',
-            transition: 'width 0.3s ease'
-          }} />
-
-          {/* Schritt 1 */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 2, cursor: 'pointer' }} onClick={() => setCurrentStep(1)}>
-            <div style={getStepCircleStyle(currentStep >= 1, currentStep === 1)}>1</div>
-            <span style={getStepTextStyle(currentStep >= 1)}>Fach</span>
-          </div>
-
-          {/* Schritt 2 */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 2, cursor: gewaehltesFach ? 'pointer' : 'default' }} onClick={() => gewaehltesFach && setCurrentStep(2)}>
-            <div style={getStepCircleStyle(currentStep >= 2, currentStep === 2)}>2</div>
-            <span style={getStepTextStyle(currentStep >= 2)}>Lektion</span>
-          </div>
-
-          {/* Schritt 3 */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 2, cursor: gewaehlterTest ? 'pointer' : 'default' }} onClick={() => gewaehlterTest && setCurrentStep(3)}>
-            <div style={getStepCircleStyle(currentStep >= 3, currentStep === 3)}>3</div>
-            <span style={getStepTextStyle(currentStep >= 3)}>Start</span>
-          </div>
-        </div>
-
-        {/* --- INHALTSBEREICH --- */}
-        <div style={{ animation: 'fadeIn 0.3s ease' }}>
-          
-          {/* CONTENT SCHRITT 1 */}
-          {currentStep === 1 && (
-            <div>
-              <h3 style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, paddingLeft: 4 }}>
-                FACH WÄHLEN
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
-                {faecher.map(fach => (
-                  <button
-                    key={fach.id}
-                    onClick={() => handleFachSelect(fach.id)}
-                    style={getCardStyle(gewaehltesFach === fach.id)}
-                  >
-                    <div style={{ fontSize: 28, marginBottom: 12 }}>{getFachIcon(fach.name)}</div>
-                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 15 }}>{fach.name}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* CONTENT SCHRITT 2 */}
-          {currentStep === 2 && (
-            <div>
-              <h3 style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, paddingLeft: 4 }}>
-                LEKTION WÄHLEN
-              </h3>
-              
-              {loadingTests ? (
-                <div style={{ color: '#64748b', textAlign: 'center', padding: 40 }}>Lade Lektionen...</div>
-              ) : tests.length === 0 ? (
-                <div style={{ color: '#64748b', textAlign: 'center', padding: 40, background: '#fff', borderRadius: 16 }}>
-                  Keine Lektionen für dieses Fach gefunden.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {tests.map(test => (
-                    <button
-                      key={test.id}
-                      onClick={() => handleTestSelect(test.id)}
-                      style={{
-                        ...getCardStyle(gewaehlterTest === test.id),
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        padding: '16px 20px',
-                        gap: 4
-                      }}
-                    >
-                      <span style={{ fontWeight: 600, fontSize: 16, color: '#1e293b' }}>{test.name}</span>
-                      <span style={{ fontSize: 13, color: '#64748b' }}>
-                        {test.buecher?.name || 'Ohne Buch'} • Klasse {test.jahrgang}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* CONTENT SCHRITT 3 */}
-          {currentStep === 3 && (
-            <div>
-              <h3 style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, paddingLeft: 4 }}>
-                TESTART WÄHLEN
-              </h3>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 40 }}>
-                <button
-                  onClick={() => setTestart('multiple_choice')}
-                  style={getCardStyle(testart === 'multiple_choice')}
-                >
-                  <div style={{ fontSize: 28, marginBottom: 12 }}>🎯</div>
-                  <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 15 }}>Multiple Choice</div>
-                </button>
-
-                <button disabled style={{ ...getCardStyle(false), opacity: 0.5, cursor: 'not-allowed' }}>
-                  <div style={{ fontSize: 28, marginBottom: 12 }}>✍️</div>
-                  <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 15 }}>Schreiben</div>
-                  <div style={{ fontSize: 11, color: BRAND_COLOR, marginTop: 6, fontWeight: 600 }}>Bald verfügbar</div>
-                </button>
-              </div>
-
-              <button 
-                onClick={handleStart}
-                style={{ 
-                  width: '100%', 
-                  padding: '16px', 
-                  fontSize: 16, 
-                  borderRadius: 16, 
-                  fontWeight: 'bold',
-                  background: BRAND_COLOR,
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(15, 81, 86, 0.2)'
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {favoritenDetails.map(fav => (
+              <button
+                key={fav.id}
+                onClick={() => handleFavoritStart(fav)}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: 'white', border: `1px solid ${BRAND_LIGHT}`, borderRadius: '0.75rem',
+                  padding: '1rem', cursor: 'pointer', textAlign: 'left',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)', transition: 'all 0.2s'
                 }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = BRAND_COLOR; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = BRAND_LIGHT; e.currentTarget.style.transform = 'translateY(0)' }}
               >
-                Test starten 🚀
+                <div>
+                  <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '1.1rem' }}>{fav.name}</div>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '4px' }}>
+                    {fav.faecher?.name} • {fav.buecher?.name || 'Kein Buch'}
+                  </div>
+                </div>
+                <div style={{ background: BRAND_LIGHT, color: BRAND_COLOR, padding: '0.5rem 1rem', borderRadius: '9999px', fontSize: '0.875rem', fontWeight: '600' }}>
+                  Üben ➔
+                </div>
               </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+
+      {/* Stepper Navigation */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
+        {[1, 2, 3].map((step) => (
+          <div key={step} style={{ flex: 1, height: '4px', background: currentStep >= step ? BRAND_COLOR : '#e5e7eb', borderRadius: '4px', transition: 'background 0.3s' }} />
+        ))}
+      </div>
+
+      {/* SCHRITT 1: Fach wählen */}
+      {currentStep === 1 && (
+        <div>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#1f2937' }}>1. Welches Fach?</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
+            {faecher.map(fach => (
+              <button
+                key={fach.id}
+                onClick={() => handleFachSelect(fach.id)}
+                style={{ padding: '1.5rem', background: 'white', border: `2px solid ${gewaehltesFach === fach.id ? BRAND_COLOR : '#e5e7eb'}`, borderRadius: '1rem', fontSize: '1.25rem', fontWeight: '600', color: gewaehltesFach === fach.id ? BRAND_COLOR : '#374151', cursor: 'pointer', transition: 'all 0.2s', boxShadow: gewaehltesFach === fach.id ? `0 4px 14px -3px ${BRAND_COLOR}40` : 'none' }}
+                onMouseOver={(e) => { if(gewaehltesFach !== fach.id) e.currentTarget.style.borderColor = BRAND_LIGHT }}
+                onMouseOut={(e) => { if(gewaehltesFach !== fach.id) e.currentTarget.style.borderColor = '#e5e7eb' }}
+              >
+                {fach.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SCHRITT 2: Lektion wählen */}
+      {currentStep === 2 && (
+        <div>
+          <button onClick={() => setCurrentStep(1)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            ← Zurück zu Fächer
+          </button>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#1f2937' }}>2. Welche Lektion?</h2>
+          
+          {loadingTests ? (
+            <div style={{ color: '#6b7280' }}>Lade Lektionen...</div>
+          ) : tests.length === 0 ? (
+            <div style={{ padding: '2rem', background: '#f9fafb', borderRadius: '1rem', textAlign: 'center', color: '#6b7280' }}>Keine Lektionen für dieses Fach gefunden.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {tests.map(test => {
+                const isFav = favoriten.includes(test.id)
+                return (
+                  <div 
+                    key={test.id} 
+                    style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+                  >
+                    <button
+                      onClick={(e) => toggleFavorit(e, test.id)}
+                      title={isFav ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
+                      style={{ background: 'white', border: '2px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.5rem', fontSize: '1.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                      onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                      onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      {/* Gelber Stern, wenn favorisiert, ansonsten blasser/grauer Stern */}
+                      <span style={{ filter: isFav ? 'none' : 'grayscale(100%) opacity(0.3)' }}>⭐</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleTestSelect(test.id)}
+                      style={{ flex: 1, padding: '1rem 1.25rem', background: 'white', border: `2px solid ${gewaehlterTest === test.id ? BRAND_COLOR : '#e5e7eb'}`, borderRadius: '0.75rem', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column' }}
+                    >
+                      <span style={{ fontSize: '1.125rem', fontWeight: '600', color: gewaehlterTest === test.id ? BRAND_COLOR : '#1f2937' }}>{test.name}</span>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '2px' }}>{test.buecher?.name || 'Kein Buch zugeordnet'}</span>
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
-
         </div>
-      </div>
+      )}
+
+      {/* SCHRITT 3: Testart & Start */}
+      {currentStep === 3 && (
+        <div>
+          <button onClick={() => setCurrentStep(2)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', marginBottom: '1rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            ← Zurück zur Auswahl
+          </button>
+          
+          <div style={{ background: BRAND_LIGHT, padding: '1.5rem', borderRadius: '1rem', marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.5rem', margin: '0 0 1.5rem 0', color: BRAND_COLOR }}>3. Trainingsmodus</h2>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '2rem' }}>
+              
+              {/* Option 1: Multiple Choice */}
+              <button
+                onClick={() => setTestart('multiple_choice')}
+                style={{ padding: '1.25rem', background: 'white', border: `2px solid ${testart === 'multiple_choice' ? BRAND_COLOR : 'transparent'}`, borderRadius: '0.75rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.2s' }}
+              >
+                <div style={{ fontSize: '2rem' }}>📝</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1f2937' }}>Multiple Choice</div>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Wähle aus 4 Antwortmöglichkeiten (ideal für Einsteiger)</div>
+                </div>
+              </button>
+
+              {/* Option 2: Karteikarten (Noch inaktiv für dieses Beispiel, aber im UI) */}
+              <button
+                disabled
+                style={{ padding: '1.25rem', background: 'white', border: '2px solid transparent', borderRadius: '0.75rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.6 }}
+              >
+                <div style={{ fontSize: '2rem' }}>🗂️</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1f2937' }}>Karteikarten <span style={{ fontSize: '0.75rem', background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px' }}>Bald</span></div>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Klassisches Umdrehen und selbst bewerten</div>
+                </div>
+              </button>
+
+              {/* Option 3: Schreiben */}
+              <button
+                disabled
+                style={{ padding: '1.25rem', background: 'white', border: '2px solid transparent', borderRadius: '0.75rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.6 }}
+              >
+                <div style={{ fontSize: '2rem' }}>⌨️</div>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1f2937' }}>Tippen <span style={{ fontSize: '0.75rem', background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px' }}>Bald</span></div>
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Schreibe die exakte Übersetzung</div>
+                </div>
+              </button>
+
+            </div>
+
+            <button
+              onClick={handleStart}
+              style={{ width: '100%', padding: '1.25rem', background: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '1.25rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 6px -1px rgba(15,81,86,0.2)' }}
+              onMouseOver={(e) => e.currentTarget.style.background = '#0a3d41'}
+              onMouseOut={(e) => e.currentTarget.style.background = BRAND_COLOR}
+            >
+              Starten 🚀
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   )
-}
-
-// --- Hilfs-Funktionen ---
-
-function getStepCircleStyle(isDone, isActive) {
-  // Das exakte Styling aus dem Screenshot: aktiver Kreis hat einen hellgrünen Glow-Rand (box-shadow/border)
-  return {
-    width: 32,
-    height: 32,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 14,
-    fontWeight: 'bold',
-    background: isActive || isDone ? BRAND_COLOR : '#fff',
-    color: isActive || isDone ? '#fff' : '#94a3b8',
-    border: isActive ? '4px solid #ccfbf1' : '4px solid transparent',
-    boxShadow: (!isActive && !isDone) ? 'inset 0 0 0 1px #cbd5e1' : 'none',
-    transition: 'all 0.3s ease'
-  }
-}
-
-function getStepTextStyle(isDone) {
-  return {
-    fontSize: 13,
-    fontWeight: isDone ? 600 : 500,
-    color: isDone ? '#1e293b' : '#94a3b8'
-  }
-}
-
-function getCardStyle(isActive) {
-  return {
-    background: '#fff',
-    padding: '24px 16px',
-    borderRadius: 16,
-    boxShadow: isActive ? `0 0 0 2px ${BRAND_COLOR}` : '0 1px 3px rgba(0,0,0,0.05)',
-    border: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    textAlign: 'center',
-    outline: 'none',
-    WebkitTapHighlightColor: 'transparent'
-  }
-}
-
-function getFachIcon(name) {
-  const n = name.toLowerCase()
-  if (n.includes('englisch')) return '🇬🇧'
-  if (n.includes('französisch')) return '🇫🇷'
-  if (n.includes('spanisch')) return '🇪🇸'
-  if (n.includes('latein')) return '🏛️'
-  if (n.includes('italienisch')) return '🇮🇹'
-  return '📚'
 }
