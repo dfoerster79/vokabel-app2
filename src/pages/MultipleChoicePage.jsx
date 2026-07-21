@@ -127,23 +127,53 @@ const MultipleChoicePage = () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const percent = Math.round((finalScore / vocabList.length) * 100);
+
+    // 1. In 'lern_attempts' speichern (angepasst an die echte DB-Struktur)
     const { data: attemptData, error: attemptError } = await supabase.from('lern_attempts').insert([{
         user_id: user.id, 
+        fach_id: fachId,
         vokabel_test_id: testId, 
-        score: finalScore, 
-        total_questions: vocabList.length,
+        testart: 'multiple_choice',
+        correct_count: finalScore, 
+        question_count: vocabList.length,
+        percent_correct: percent,
         time_taken_seconds: timeTaken,
-        avg_time_per_word: avgTime
+        avg_time_per_word: avgTime,
+        started_at: new Date(startTime).toISOString(),
+        finished_at: new Date().toISOString()
     }]).select().single();
 
-    if (attemptError) console.error("Fehler beim Speichern der Zeiten:", attemptError);
+    if (attemptError) {
+      console.error("Fehler beim Speichern der Ergebnisse:", attemptError);
+      return;
+    }
 
     if (attemptData && finalFehlerListe.length > 0) {
-      const fehlerInserts = finalFehlerListe.map(v => ({ attempt_id: attemptData.id, vokabel_id: v.id }));
+      // 2. In 'lern_attempt_fehler' speichern
+      const fehlerInserts = finalFehlerListe.map(v => ({ 
+        attempt_id: attemptData.id, 
+        user_id: user.id,
+        fach_id: fachId,
+        vokabel_test_id: testId,
+        vokabel_id: v.id,
+        frage: v.original,
+        gegebene_antwort: "Falsch beantwortet",
+        richtige_antwort: v.uebersetzung,
+        ist_richtig: false
+      }));
       await supabase.from('lern_attempt_fehler').insert(fehlerInserts);
 
+      // 3. In 'lern_falsche_woerter' speichern
       if (fachId) {
-        const falscheWoerterInserts = finalFehlerListe.map(v => ({ user_id: user.id, fach_id: fachId, vokabel_id: v.id }));
+        const falscheWoerterInserts = finalFehlerListe.map(v => ({ 
+          user_id: user.id, 
+          fach_id: fachId, 
+          vokabel_test_id: testId,
+          vokabel_id: v.id,
+          fehler_anzahl: 1, 
+          zuletzt_falsch_am: new Date().toISOString()
+        }));
         await supabase.from('lern_falsche_woerter').upsert(falscheWoerterInserts, { onConflict: 'user_id, fach_id, vokabel_id' });
       }
     }
