@@ -1,117 +1,144 @@
-import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
-import { useAuthStore } from "../store/authStore";
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../store/authStore';
 
 export default function KlassenVerwaltung() {
-  const user = useAuthStore((s) => s.user);
+  const { user } = useAuthStore();
   const [faecher, setFaecher] = useState([]);
-  const [klasseProFach, setKlasseProFach] = useState({});
+  const [userKlassen, setUserKlassen] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [erfolgsmeldung, setErfolgsmeldung] = useState("");
+  const [saveMsg, setSaveMsg] = useState(null);
 
-  // Hilfsfunktion: Berechnet das aktuelle bayerische Schuljahr
-  const getCurrentSchuljahr = () => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const month = now.getMonth() + 1; // 1-12
-    // In Bayern beginnt das neue Schuljahr immer im September.
-    // Daher: ab September (month >= 9) sind wir im Jahr y/y+1
-    return month >= 9 ? `${y}/${y + 1}` : `${y - 1}/${y}`;
-  };
+  // Globaler Jahrgang
+  const [globalJahrgang, setGlobalJahrgang] = useState('');
 
   useEffect(() => {
-    if (!user) return;
-    Promise.all([
-      supabase.from("faecher").select("*").order("id"),
-      supabase.from("profiles").select("klasse_pro_fach, schuljahr_stand").eq("id", user.id).single()
-    ]).then(([faecherRes, profileRes]) => {
-      setFaecher(faecherRes.data || []);
-      setKlasseProFach(profileRes.data?.klasse_pro_fach || {});
-      setLoading(false);
-    });
+    if (user) loadData();
   }, [user]);
 
-  const handleUpdate = (fachId, field, value) => {
-    setErfolgsmeldung("");
-    setKlasseProFach(prev => ({
-      ...prev,
-      [fachId]: {
-        ...prev[fachId],
-        [field]: value
+  const loadData = async () => {
+    setLoading(true);
+    
+    // Fächer laden
+    const { data: faecherData } = await supabase.from('faecher').select('*').order('name');
+    if (faecherData) setFaecher(faecherData);
+
+    // Bisherige Klassen laden
+    const { data: profile } = await supabase.from('profiles').select('klassen').eq('id', user.id).single();
+    if (profile?.klassen) {
+      setUserKlassen(profile.klassen);
+      
+      // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
+      const ersteKlasse = Object.values(profile.klassen)[0];
+      if (ersteKlasse) {
+        // Zieht die Zahl (z.B. "7") aus "7f" oder "10" aus "10a"
+        const match = ersteKlasse.match(/^(\d+)/);
+        if (match) setGlobalJahrgang(match[1]);
       }
-    }));
+    }
+    
+    setLoading(false);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    const schuljahr = getCurrentSchuljahr();
-    
-    const { error } = await supabase.from("profiles").update({
-      klasse_pro_fach: klasseProFach,
-      schuljahr_stand: schuljahr,
-      klassenupdate_erforderlich: false,
-      letztes_klassenupdate_at: new Date().toISOString()
-    }).eq("id", user.id);
+  // Wird aufgerufen, wenn man den Zusatz (z.B. "f") ändert
+  const handleZusatzChange = (fachId, zusatz) => {
+    setUserKlassen(prev => {
+      // Wenn der Zusatz leer ist, speichern wir nur den globalen Jahrgang (oder gar nichts)
+      if (!zusatz && !globalJahrgang) {
+        const next = { ...prev };
+        delete next[fachId];
+        return next;
+      }
+      return { ...prev, [fachId]: `${globalJahrgang}${zusatz}` };
+    });
+  };
 
+  // Hilfsfunktion, um den Zusatz ("f") aus dem gespeicherten "7f" zu extrahieren
+  const getZusatz = (fachId) => {
+    const gespeicherterWert = userKlassen[fachId] || '';
+    if (!globalJahrgang) return gespeicherterWert;
+    return gespeicherterWert.startsWith(globalJahrgang) 
+      ? gespeicherterWert.replace(globalJahrgang, '') 
+      : gespeicherterWert;
+  };
+
+  const saveKlassen = async () => {
+    setSaving(true);
+    setSaveMsg(null);
+    const { error } = await supabase.from('profiles').update({ klassen: userKlassen }).eq('id', user.id);
     setSaving(false);
     if (error) {
-      alert("Fehler beim Speichern: " + error.message);
+      setSaveMsg({ ok: false, text: 'Fehler beim Speichern' });
     } else {
-      setErfolgsmeldung(`✅ Klassen für das Schuljahr ${schuljahr} gespeichert!`);
+      setSaveMsg({ ok: true, text: 'Erfolgreich gespeichert ✓' });
     }
   };
 
-  if (loading) return <div style={{ padding: 20 }}>Lade Fächer...</div>;
+  if (loading) return <div style={{ color: '#6b7280', textAlign: 'center', padding: '1rem' }}>Lade Klassen...</div>;
 
   return (
-    <div className="card" style={{ marginTop: 24 }}>
-      <h3 style={{ margin: "0 0 4px" }}>Meine Fächer & Klassen</h3>
-      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-        Aktuelles Schuljahr: <strong>{getCurrentSchuljahr()}</strong>
-      </p>
+    <div style={{ background: 'white', padding: "1.5rem", borderRadius: "1rem", marginBottom: "1.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 14, color: '#111827' }}>
+        Meine Fächer & Klassen
+      </h2>
+      
+      {/* GLOBALER JAHRGANG */}
+      <div style={{ background: '#f8fafc', padding: 15, borderRadius: 8, marginBottom: 20, border: '1px solid #e5e7eb' }}>
+        <label style={{ display: 'block', fontSize: 12, color: '#6b7280', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Dein aktueller Jahrgang
+        </label>
+        <select 
+          value={globalJahrgang} 
+          onChange={(e) => setGlobalJahrgang(e.target.value)}
+          style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #d1d5db', backgroundColor: '#ffffff', color: '#111827', fontSize: '1rem', boxSizing: 'border-box' }}
+        >
+          <option value="">-- Jahrgang wählen --</option>
+          {[5, 6, 7, 8, 9, 10, 11, 12, 13].map(j => (
+            <option key={j} value={j}>Klasse {j}</option>
+          ))}
+        </select>
+        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8, marginBottom: 0 }}>
+          Dieser Jahrgang wird automatisch für alle Fächer verwendet.
+        </p>
+      </div>
 
-      {faecher.map(f => {
-        const data = klasseProFach[f.id] || { jahrgang: "", klasse_name: "" };
-        return (
-          <div key={f.id} style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-            <div style={{ width: 130, fontWeight: 500 }}>
-              {f.symbol} {f.name}
+      {globalJahrgang ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+          {faecher.map(fach => (
+            <div key={fach.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 120, fontWeight: 'bold', color: '#1f2937' }}>
+                {fach.name}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1 }}>
+                <span style={{ fontSize: 15, fontWeight: 'bold', color: '#6b7280' }}>
+                  {globalJahrgang}
+                </span>
+                <input
+                  type="text"
+                  placeholder="Zusatz (z.B. 'f')"
+                  value={getZusatz(fach.id)}
+                  onChange={(e) => handleZusatzChange(fach.id, e.target.value)}
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #d1d5db', backgroundColor: '#ffffff', color: '#111827', fontSize: '1rem', boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
-            <select 
-              value={data.jahrgang || ""} 
-              onChange={e => handleUpdate(f.id, "jahrgang", parseInt(e.target.value) || "")}
-              style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", flex: 1, minWidth: 100 }}
-            >
-              <option value="">Jahrgang...</option>
-              {[5, 6, 7, 8, 9, 10, 11, 12, 13].map(j => (
-                <option key={j} value={j}>{j}. Klasse</option>
-              ))}
-            </select>
-            <input 
-              placeholder="Bezeichnung (z.B. 7fg)"
-              value={data.klasse_name || ""}
-              onChange={e => handleUpdate(f.id, "klasse_name", e.target.value)}
-              style={{ flex: 2, minWidth: 140, padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb" }}
-            />
-          </div>
-        );
-      })}
-
-      {erfolgsmeldung && (
-        <div style={{ background: "#dcfce7", color: "#166534", padding: "8px 12px", borderRadius: 8, marginBottom: 12, fontSize: 14 }}>
-          {erfolgsmeldung}
+          ))}
+          
+          <button 
+            onClick={saveKlassen} 
+            disabled={saving} 
+            style={{ marginTop: 15, width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            {saving ? 'Speichert...' : 'Fächer & Klassen speichern'}
+          </button>
+          {saveMsg && <div style={{ color: saveMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold', marginTop: 10 }}>{saveMsg.text}</div>}
+        </div>
+      ) : (
+        <div style={{ padding: 15, background: '#fef3c7', color: '#d97706', borderRadius: 8, fontSize: 14, border: '1px solid #fde68a' }}>
+          Bitte wähle oben zuerst deinen Jahrgang aus.
         </div>
       )}
-
-      <button 
-        onClick={handleSave} 
-        disabled={saving}
-        className="btn btn-primary" 
-        style={{ width: "100%", marginTop: 8 }}
-      >
-        {saving ? "⏳ Speichere..." : "Klassen speichern"}
-      </button>
     </div>
   );
 }
