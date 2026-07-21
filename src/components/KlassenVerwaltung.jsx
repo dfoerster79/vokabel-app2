@@ -30,7 +30,7 @@ export default function KlassenVerwaltung() {
       setUserKlassen(profile.klasse_pro_fach);
       
       // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
-      const ersteKlasse = Object.values(profile.klassen)[0];
+    const ersteKlasse = Object.values(profile.klasse_pro_fach)[0];
       if (ersteKlasse) {
         // Zieht die Zahl (z.B. "7") aus "7f" oder "10" aus "10a"
         const match = ersteKlasse.match(/^(\d+)/);
