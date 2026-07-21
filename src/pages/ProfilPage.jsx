@@ -331,60 +331,16 @@ export default function ProfilPage() {
   if (roleLoading || !profileInitialized) {
     return <div style={{ padding: 20, textAlign: 'center' }}>Lade Profil...</div>
   }
-    const inputStyle = {
-    display: 'block',
-    width: '100%',
-    padding: '0.75rem',
-    borderRadius: '0.5rem',
-    border: '1px solid #d1d5db',
-    backgroundColor: '#ffffff',
-    color: '#111827',
-    fontSize: '1rem',
-    boxSizing: 'border-box',
-    marginBottom: '1rem'
-  }
 
-  const labelStyle = {
-    display: 'block',
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 4,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+  const inputStyle = {
+    display: 'block', width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+    border: '1px solid #d1d5db', backgroundColor: '#ffffff', color: '#111827',
+    fontSize: '1rem', boxSizing: 'border-box', marginBottom: '1rem'
   }
-
-  const sectionTitle = {
-    fontSize: 18,
-    fontWeight: 700,
-    marginBottom: 14,
-    color: '#111827',
-  }
-
-  const badgeStyle = {
-    display: 'inline-block',
-    marginLeft: 6,
-    marginTop: 3,
-    background: '#ccfbf1',
-    color: '#0f5156',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '0.04em',
-  }
-
-  const aenderungsLinkStyle = {
-    background: 'none',
-    border: 'none',
-    padding: 0,
-    cursor: 'pointer',
-    fontSize: 13,
-    color: '#0f5156',
-    textDecoration: 'underline',
-    textUnderlineOffset: 3,
-    fontWeight: 600,
-  }
+  const labelStyle = { display: 'block', fontSize: 12, color: '#6b7280', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }
+  const sectionTitle = { fontSize: 18, fontWeight: 700, marginBottom: 14, color: '#111827' }
+  const badgeStyle = { display: 'inline-block', marginLeft: 6, marginTop: 3, background: '#ccfbf1', color: '#0f5156', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em' }
+  const aenderungsLinkStyle = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, color: '#0f5156', textDecoration: 'underline', textUnderlineOffset: 3, fontWeight: 600 }
 
   return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", paddingBottom: "5rem", fontFamily: "sans-serif" }}>
@@ -392,7 +348,7 @@ export default function ProfilPage() {
       {/* --- Menüleiste --- */}
       <div style={{ backgroundColor: "white", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb", marginBottom: "1.5rem" }}>
         <h1 style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", fontSize: "1.2rem", color: "#0f5156", margin: 0 }}>
-          Profil
+          ⚙️ Einstellungen
         </h1>
         <button 
           onClick={() => navigate('/dashboard')}
@@ -403,6 +359,16 @@ export default function ProfilPage() {
       </div>
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 1rem' }}>
+
+        {/* --- NEUER HEADER MIT VERLAUF --- */}
+        <div style={{ background: "linear-gradient(135deg, #0f5156 0%, #167a7f 100%)", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+          <h2 style={{ margin: 0, color: "white", fontSize: 24, fontWeight: "800", display: "flex", alignItems: "center", gap: 8 }}>
+             Dein Profil
+          </h2>
+          <p style={{ color: "#e5e7eb", margin: "10px 0 0 0", fontSize: 14, lineHeight: 1.5 }}>
+            Verwalte hier deine persönlichen Daten, deine Schule und deine aktuellen Fächer.
+          </p>
+        </div>
 
         {isSchuljahrUpdate && (
           <div style={{ background: '#ccfbf1', border: '1px solid #2dd4bf', borderRadius: '1rem', padding: 15, marginBottom: 20, color: '#0f5156' }}>
@@ -418,37 +384,17 @@ export default function ProfilPage() {
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Vorname</label>
-                <input
-                  type="text"
-                  value={vorname}
-                  onChange={(e) => setVorname(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Vorname"
-                />
+                <input type="text" value={vorname} onChange={(e) => setVorname(e.target.value)} style={inputStyle} placeholder="Vorname" />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Nachname</label>
-                <input
-                  type="text"
-                  value={nachname}
-                  onChange={(e) => setNachname(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Nachname"
-                />
+                <input type="text" value={nachname} onChange={(e) => setNachname(e.target.value)} style={inputStyle} placeholder="Nachname" />
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={nameSaving}
-              style={{ width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
-            >
+            <button type="submit" disabled={nameSaving} style={{ width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
               {nameSaving ? 'Speichert...' : 'Name speichern'}
             </button>
-            {nameMsg && (
-              <div style={{ marginTop: 10, fontSize: 13, color: nameMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                {nameMsg.text}
-              </div>
-            )}
+            {nameMsg && <div style={{ marginTop: 10, fontSize: 13, color: nameMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{nameMsg.text}</div>}
           </form>
         </div>
 
@@ -457,33 +403,13 @@ export default function ProfilPage() {
           <h2 style={sectionTitle}>Passwort ändern</h2>
           <form onSubmit={handlePwSave}>
             <label style={labelStyle}>Neues Passwort</label>
-            <input
-              type="password"
-              value={pwNeu}
-              onChange={(e) => setPwNeu(e.target.value)}
-              placeholder="Mindestens 6 Zeichen"
-              style={inputStyle}
-            />
+            <input type="password" value={pwNeu} onChange={(e) => setPwNeu(e.target.value)} placeholder="Mindestens 6 Zeichen" style={inputStyle} />
             <label style={labelStyle}>Passwort wiederholen</label>
-            <input
-              type="password"
-              value={pwWdh}
-              onChange={(e) => setPwWdh(e.target.value)}
-              placeholder="Passwort bestätigen"
-              style={inputStyle}
-            />
-            <button
-              type="submit"
-              disabled={pwSaving}
-              style={{ width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
-            >
+            <input type="password" value={pwWdh} onChange={(e) => setPwWdh(e.target.value)} placeholder="Passwort bestätigen" style={inputStyle} />
+            <button type="submit" disabled={pwSaving} style={{ width: '100%', padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
               {pwSaving ? 'Speichert...' : 'Passwort ändern'}
             </button>
-            {pwMsg && (
-              <div style={{ marginTop: 10, fontSize: 13, color: pwMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                {pwMsg.text}
-              </div>
-            )}
+            {pwMsg && <div style={{ marginTop: 10, fontSize: 13, color: pwMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{pwMsg.text}</div>}
           </form>
         </div>
 
@@ -496,88 +422,44 @@ export default function ProfilPage() {
             )}
           </div>
 
-          {/* 1) BUNDESLAND & ORT */}
           {showOrtEditor ? (
             <div style={{ marginBottom: 20, padding: 15, background: '#f8fafc', borderRadius: 8, border: '1px solid #e5e7eb' }}>
               <h3 style={{ fontSize: 13, margin: '0 0 10px 0', color: '#4b5563' }}>Bundesland & Ort festlegen</h3>
               <label style={labelStyle}>Bundesland</label>
-              <select
-                value={bundesland}
-                onChange={(e) => {
-                  setBundesland(e.target.value)
-                  setOrtInput('')
-                  setOrtGewaehlt('')
-                  setSchuleId('')
-                  setOrtSuggestions([])
-                }}
-                style={inputStyle}
-              >
+              <select value={bundesland} onChange={(e) => { setBundesland(e.target.value); setOrtInput(''); setOrtGewaehlt(''); setSchuleId(''); setOrtSuggestions([]); }} style={inputStyle}>
                 <option value="">-- Bitte wählen --</option>
                 {BUNDESLAENDER.map(b => <option key={b.kuerzel} value={b.kuerzel}>{b.name}</option>)}
               </select>
 
               <div style={{ position: 'relative' }} ref={ortRef}>
                 <label style={labelStyle}>Ort / Stadt</label>
-                <input
-                  type="text"
-                  value={ortInput}
-                  onChange={(e) => {
-                    setOrtInput(e.target.value)
-                    setOrtGewaehlt('')
-                    setSchuleId('')
-                  }}
-                  onFocus={() => { if (ortSuggestions.length > 0) setShowSuggestions(true) }}
-                  placeholder={bundesland ? "Ort tippen..." : "Erst Bundesland wählen"}
-                  disabled={!bundesland}
-                  style={inputStyle}
-                />
+                <input type="text" value={ortInput} onChange={(e) => { setOrtInput(e.target.value); setOrtGewaehlt(''); setSchuleId(''); }} onFocus={() => { if (ortSuggestions.length > 0) setShowSuggestions(true) }} placeholder={bundesland ? "Ort tippen..." : "Erst Bundesland wählen"} disabled={!bundesland} style={inputStyle} />
                 {loadingOrte && <div style={{ fontSize: 12, color: '#6b7280', marginTop: -5, marginBottom: 10 }}>Suche...</div>}
                 {showSuggestions && ortSuggestions.length > 0 && (
                   <ul style={{ position: 'absolute', top: 65, left: 0, right: 0, background: 'white', border: '1px solid #d1d5db', borderRadius: 8, maxHeight: 200, overflowY: 'auto', margin: 0, padding: 0, listStyle: 'none', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                     <li style={{ padding: '8px 12px', fontSize: 11, background: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}>Ort aus der Liste wählen</li>
-                    {ortSuggestions.map(o => (
-                      <li
-                        key={o}
-                        onClick={() => handleOrtSelect(o)}
-                        style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', color: '#1f2937' }}
-                      >
-                        {o}
-                      </li>
-                    ))}
+                    {ortSuggestions.map(o => <li key={o} onClick={() => handleOrtSelect(o)} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', color: '#1f2937' }}>{o}</li>)}
                   </ul>
                 )}
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={handleOrtSave} disabled={ortSaving} style={{ flex: 1, padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                  {ortSaving ? 'Speichert...' : 'Ort bestätigen'}
-                </button>
-                {hasSavedOrt && (
-                  <button onClick={cancelOrtEdit} style={{ padding: '0.75rem', background: 'white', color: '#4b5563', border: '1px solid #d1d5db', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                    Abbrechen
-                  </button>
-                )}
+                <button onClick={handleOrtSave} disabled={ortSaving} style={{ flex: 1, padding: '0.75rem', background: '#0f5156', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>{ortSaving ? 'Speichert...' : 'Ort bestätigen'}</button>
+                {hasSavedOrt && <button onClick={cancelOrtEdit} style={{ padding: '0.75rem', background: 'white', color: '#4b5563', border: '1px solid #d1d5db', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Abbrechen</button>}
               </div>
               {ortMsg && <div style={{ marginTop: 10, fontSize: 13, color: ortMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{ortMsg.text}</div>}
             </div>
           ) : (
             <div style={{ marginBottom: 15 }}>
-              <div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>
-                {ortAnzeige} <span style={{ color: '#6b7280', fontWeight: 'normal' }}>({bundeslandAnzeige})</span>
-              </div>
+              <div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>{ortAnzeige} <span style={{ color: '#6b7280', fontWeight: 'normal' }}>({bundeslandAnzeige})</span></div>
               <button onClick={startOrtEdit} style={{ ...aenderungsLinkStyle, fontSize: 12, marginTop: 4 }}>Ort/Bundesland ändern</button>
             </div>
           )}
 
-          {/* 2) SCHULE WÄHLEN */}
           {showSchuleCard && (
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 15 }}>
               {showSchuleSelection ? (
-                loadingSchulen ? (
-                  <div style={{ fontSize: 13, color: '#9ca3af' }}>Schulen werden geladen...</div>
-                ) : schulen.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#ef4444' }}>Keine Schulen für diesen Ort gefunden.</div>
-                ) : (
+                loadingSchulen ? <div style={{ fontSize: 13, color: '#9ca3af' }}>Schulen werden geladen...</div> : schulen.length === 0 ? <div style={{ fontSize: 13, color: '#ef4444' }}>Keine Schulen für diesen Ort gefunden.</div> : (
                   <>
                     {schulen.length > 3 && schultypen.length > 1 && (
                       <div style={{ marginBottom: 10 }}>
@@ -588,41 +470,22 @@ export default function ProfilPage() {
                         </select>
                       </div>
                     )}
-
                     <label style={labelStyle}>Schule wählen</label>
-                    <select
-                      value={schuleId}
-                      onChange={(e) => {
-                        setSchuleId(e.target.value)
-                        handleSchuleSave(e.target.value)
-                      }}
-                      style={inputStyle}
-                    >
+                    <select value={schuleId} onChange={(e) => { setSchuleId(e.target.value); handleSchuleSave(e.target.value); }} style={inputStyle}>
                       <option value="">-- Bitte wähle deine Schule --</option>
-                      {gefilterteSchulen.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.schulart})</option>
-                      ))}
+                      {gefilterteSchulen.map(s => <option key={s.id} value={s.id}>{s.name} ({s.schulart})</option>)}
                     </select>
-                    
-                    {hasSavedSchule && (
-                      <button onClick={cancelSchuleEdit} style={{ marginTop: 10, padding: '0.5rem', background: 'transparent', color: '#6b7280', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>
-                        Abbrechen
-                      </button>
-                    )}
+                    {hasSavedSchule && <button onClick={cancelSchuleEdit} style={{ marginTop: 10, padding: '0.5rem', background: 'transparent', color: '#6b7280', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>Abbrechen</button>}
                     {schuleSaving && <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 10 }}>Wird gespeichert...</div>}
                   </>
                 )
               ) : (
-                loadingGespeicherteSchule ? (
-                  <div style={{ fontSize: 13, color: '#9ca3af' }}>Lade Schule...</div>
-                ) : gespeicherteSchule ? (
+                loadingGespeicherteSchule ? <div style={{ fontSize: 13, color: '#9ca3af' }}>Lade Schule...</div> : gespeicherteSchule ? (
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{gespeicherteSchule.name}</div>
                     <div style={badgeStyle}>{gespeicherteSchule.schulart}</div>
                   </div>
-                ) : (
-                  <div style={{ fontSize: 13, color: '#ef4444' }}>Fehler beim Laden der Schule</div>
-                )
+                ) : <div style={{ fontSize: 13, color: '#ef4444' }}>Fehler beim Laden der Schule</div>
               )}
               {schuleMsg && <div style={{ marginTop: 10, fontSize: 13, color: schuleMsg.ok ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{schuleMsg.text}</div>}
             </div>
