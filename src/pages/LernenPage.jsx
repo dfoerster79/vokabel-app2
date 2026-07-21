@@ -125,10 +125,25 @@ export default function LernenPage() {
 
   if (loadingFaecher) return <div style={{ padding: "2rem", textAlign: "center" }}>Lade Daten...</div>;
     return (
-    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", padding: "1.5rem 0 5rem 0", fontFamily: "sans-serif" }}>
+    <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", paddingBottom: "5rem", fontFamily: "sans-serif" }}>
+      
+      {/* --- NEU: Menüleiste ganz oben --- */}
+      <div style={{ backgroundColor: "white", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb", marginBottom: "1.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", fontSize: "1.2rem", color: "#0f5156" }}>
+          📚 VokabelApp
+        </div>
+        <button 
+          onClick={() => navigate('/dashboard')}
+          style={{ background: "none", border: "none", color: "#6b7280", fontSize: "0.9rem", cursor: "pointer" }}
+        >
+          Abbrechen
+        </button>
+      </div>
+      {/* ------------------------------- */}
+
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 1rem" }}>
         
-        {/* 1) Große grüne Karte als Header (allseitig abgerundet) */}
+        {/* 1) Große grüne Karte als Header */}
         <div style={{ backgroundColor: "#0f5156", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2.5rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
           <h2 style={{ margin: 0, color: "white", fontSize: 22, display: "flex", alignItems: "center", gap: 8 }}>
             🧠 Lern-Modus
@@ -138,7 +153,7 @@ export default function LernenPage() {
           </p>
         </div>
         
-        {/* 2) Stepper (Dunkle Kreise mit hellem Schein) */}
+        {/* 2) Stepper */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3rem", position: "relative" }}>
           {/* Graue Linie im Hintergrund */}
           <div style={{ position: "absolute", top: 15, left: "15%", right: "15%", height: 2, backgroundColor: "#e5e7eb", zIndex: 0 }} />
@@ -160,7 +175,7 @@ export default function LernenPage() {
                     width: 32, height: 32, borderRadius: "50%", 
                     backgroundColor: active ? "#0f5156" : "white", 
                     border: active ? "none" : "2px solid #e5e7eb", 
-                    boxShadow: active ? `0 0 0 4px ${BRAND_LIGHT}` : "none", // Heller Schein um den Kreis
+                    boxShadow: active ? `0 0 0 4px ${BRAND_LIGHT}` : "none", 
                     color: active ? "white" : "#9ca3af", 
                     display: "flex", alignItems: "center", justifyContent: "center", 
                     fontWeight: "bold", fontSize: 14, cursor: active ? "pointer" : "default",
@@ -314,5 +329,7 @@ export default function LernenPage() {
 
       </div>
     </div>
+  );
+}
   );
 }
