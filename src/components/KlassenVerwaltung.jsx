@@ -33,8 +33,8 @@ export default function KlassenVerwaltung() {
         
         // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
         const klassenWerte = Object.values(profile.klasse_pro_fach);
-        if (klassenWerte.length > 0) {
-          const ersteKlasse = String(klassenWerte[0]); // Sicherstellen, dass es ein String ist
+        if (klassenWerte.length > 0 && klassenWerte[0]) {
+          const ersteKlasse = String(klassenWerte[0]); 
           // Zieht die Zahl (z.B. "7") aus "7f" oder "10" aus "10a"
           const match = ersteKlasse.match(/^(\d+)/);
           if (match) setGlobalJahrgang(match[1]);
@@ -52,6 +52,7 @@ export default function KlassenVerwaltung() {
       setLoading(false);
     }
   };
+
   // Wird aufgerufen, wenn man den Zusatz (z.B. "f") ändert
   const handleZusatzChange = (fachId, zusatz) => {
     // Erzwingt Kleinschreibung direkt bei der Eingabe
@@ -80,11 +81,9 @@ export default function KlassenVerwaltung() {
     setSaving(true);
     setSaveMsg(null);
 
-    // Bereinige das Objekt vor dem Speichern (löscht Fächer, bei denen nur die Zahl steht oder die komplett leer sind)
+    // Bereinige das Objekt vor dem Speichern
     const cleanKlassen = {};
     for (const [fachId, wert] of Object.entries(userKlassen)) {
-       // Speichere es nur, wenn es mehr als nur der nackte Jahrgang ist (z.B. wenn jemand "7" eingibt, aber das "f" fehlt, speichern wir das Fach nicht)
-       // Wenn du willst, dass Fächer OHNE Zusatz gespeichert werden, entferne die folgende if-Abfrage
        if (wert && wert !== globalJahrgang) {
            cleanKlassen[fachId] = wert;
        }
@@ -96,7 +95,7 @@ export default function KlassenVerwaltung() {
     if (error) {
       setSaveMsg({ ok: false, text: 'Fehler beim Speichern: ' + error.message });
     } else {
-      setUserKlassen(cleanKlassen); // Aktualisiere den State mit dem bereinigten Objekt
+      setUserKlassen(cleanKlassen);
       setSaveMsg({ ok: true, text: 'Erfolgreich gespeichert ✓' });
     }
   };
