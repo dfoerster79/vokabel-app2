@@ -5,7 +5,7 @@ import { useRole } from '../hooks/useRole.js'
 const menuSchueler = [
   { icon: '📝', label: 'Neuer Test', desc: 'Foto-Scan: Vokabeln aus Buch', to: '/neuer-test' },
   { icon: '🎯', label: 'Lernen', desc: 'Vokabeln üben', to: '/lernen' },
-  { icon: '📚', label: 'Meine Sets', desc: 'Alle Vokabelsets', to: '/sets' },
+  { icon: '🏆', label: 'Rangliste', desc: 'Vergleiche dich mit anderen', to: '/rangliste' }, // <-- Hier ist die Änderung
   { icon: '🏫', label: 'Mein Kurs', desc: 'Kurseinstellungen', to: '/profil' },
 ]
 
