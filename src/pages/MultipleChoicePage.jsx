@@ -275,4 +275,32 @@ const MultipleChoicePage = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
         {options.map((option, idx) => {
           
-          let btnStyle 
+          let btnStyle = { width: '100%', textAlign: 'left', padding: '1.25rem', borderRadius: '1rem', fontSize: '1.25rem', fontWeight: '500', cursor: showFeedback ? 'not-allowed' : 'pointer', background: 'white', border: '2px solid #e5e7eb', color: '#374151' };
+          
+          if (showFeedback) {
+            if (option === currentVocab.uebersetzung) {
+              btnStyle = { ...btnStyle, backgroundColor: '#22c55e', borderColor: '#22c55e', color: 'white' };
+            } else if (option === selectedAnswer && !isCorrectFeedback) {
+              btnStyle = { ...btnStyle, backgroundColor: '#ef4444', borderColor: '#ef4444', color: 'white' };
+            } else {
+              btnStyle = { ...btnStyle, backgroundColor: '#f3f4f6', borderColor: '#f3f4f6', color: '#9ca3af', opacity: 0.5 };
+            }
+          }
+
+          return (
+            <button
+              key={idx}
+              onClick={() => handleAnswerClick(option)}
+              disabled={showFeedback}
+              style={btnStyle}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default MultipleChoicePage;
