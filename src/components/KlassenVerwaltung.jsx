@@ -25,9 +25,9 @@ export default function KlassenVerwaltung() {
     if (faecherData) setFaecher(faecherData);
 
     // Bisherige Klassen laden
-    const { data: profile } = await supabase.from('profiles').select('klassen').eq('id', user.id).single();
-    if (profile?.klassen) {
-      setUserKlassen(profile.klassen);
+    const { data: profile } = await supabase.from('profiles').select('klasse_pro_fach').eq('id', user.id).single();
+    if (profile?.klasse_pro_fach) {
+      setUserKlassen(profile.klasse_pro_fach);
       
       // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
       const ersteKlasse = Object.values(profile.klassen)[0];
@@ -79,7 +79,7 @@ export default function KlassenVerwaltung() {
        }
     }
 
-    const { error } = await supabase.from('profiles').update({ klassen: cleanKlassen }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update({ klasse_pro_fach: cleanKlassen }).eq('id', user.id);
     setSaving(false);
     
     if (error) {
