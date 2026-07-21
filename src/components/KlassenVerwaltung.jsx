@@ -43,14 +43,16 @@ export default function KlassenVerwaltung() {
 
   // Wird aufgerufen, wenn man den Zusatz (z.B. "f") ändert
   const handleZusatzChange = (fachId, zusatz) => {
+    // Erzwingt Kleinschreibung direkt bei der Eingabe
+    const kleinerZusatz = zusatz.toLowerCase();
+
     setUserKlassen(prev => {
-      // Wenn der Zusatz leer ist, speichern wir nur den globalen Jahrgang (oder gar nichts)
-      if (!zusatz && !globalJahrgang) {
+      if (!kleinerZusatz && !globalJahrgang) {
         const next = { ...prev };
         delete next[fachId];
         return next;
       }
-      return { ...prev, [fachId]: `${globalJahrgang}${zusatz}` };
+      return { ...prev, [fachId]: `${globalJahrgang}${kleinerZusatz}` };
     });
   };
 
@@ -66,11 +68,24 @@ export default function KlassenVerwaltung() {
   const saveKlassen = async () => {
     setSaving(true);
     setSaveMsg(null);
-    const { error } = await supabase.from('profiles').update({ klassen: userKlassen }).eq('id', user.id);
+
+    // Bereinige das Objekt vor dem Speichern (löscht Fächer, bei denen nur die Zahl steht oder die komplett leer sind)
+    const cleanKlassen = {};
+    for (const [fachId, wert] of Object.entries(userKlassen)) {
+       // Speichere es nur, wenn es mehr als nur der nackte Jahrgang ist (z.B. wenn jemand "7" eingibt, aber das "f" fehlt, speichern wir das Fach nicht)
+       // Wenn du willst, dass Fächer OHNE Zusatz gespeichert werden, entferne die folgende if-Abfrage
+       if (wert && wert !== globalJahrgang) {
+           cleanKlassen[fachId] = wert;
+       }
+    }
+
+    const { error } = await supabase.from('profiles').update({ klassen: cleanKlassen }).eq('id', user.id);
     setSaving(false);
+    
     if (error) {
-      setSaveMsg({ ok: false, text: 'Fehler beim Speichern' });
+      setSaveMsg({ ok: false, text: 'Fehler beim Speichern: ' + error.message });
     } else {
+      setUserKlassen(cleanKlassen); // Aktualisiere den State mit dem bereinigten Objekt
       setSaveMsg({ ok: true, text: 'Erfolgreich gespeichert ✓' });
     }
   };
@@ -119,6 +134,9 @@ export default function KlassenVerwaltung() {
                   placeholder="Zusatz (z.B. 'f')"
                   value={getZusatz(fach.id)}
                   onChange={(e) => handleZusatzChange(fach.id, e.target.value)}
+                  autoCapitalize="none" 
+                  autoCorrect="off" 
+                  spellCheck="false"
                   style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #d1d5db', backgroundColor: '#ffffff', color: '#111827', fontSize: '1rem', boxSizing: 'border-box' }}
                 />
               </div>
