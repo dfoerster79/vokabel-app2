@@ -27,37 +27,31 @@ export default function KlassenVerwaltung() {
       // 2. Bisherige Klassen laden
       const { data: profile } = await supabase.from('profiles').select('klasse_pro_fach').eq('id', user.id).single();
       
-      // Prüfen, ob Daten da sind und ob es wirklich ein Objekt ist
       if (profile?.klasse_pro_fach && typeof profile.klasse_pro_fach === 'object') {
         setUserKlassen(profile.klasse_pro_fach);
         
-        // Versuche den globalen Jahrgang aus dem ersten gefundenen Fach auszulesen
         const klassenWerte = Object.values(profile.klasse_pro_fach);
         if (klassenWerte.length > 0 && klassenWerte[0]) {
-          const ersteKlasse = String(klassenWerte[0]); 
-          // Zieht die Zahl (z.B. "7") aus "7f" oder "10" aus "10a"
+          const ersteKlasse = String(klassenWerte[0] || ''); 
           const match = ersteKlasse.match(/^(\d+)/);
           if (match) setGlobalJahrgang(match[1]);
         }
       } else {
-        // Falls in der DB nichts steht (oder etwas kaputt ist), setze es leer
         setUserKlassen({});
       }
     } catch (err) {
       console.error("Fehler beim Laden der Klassen:", err);
-      // Wenn es knallt, setzen wir wenigstens ein leeres Objekt, damit die Seite lädt
       setUserKlassen({}); 
     } finally {
-      // Das WICHTIGSTE: Egal ob Erfolg oder Fehler, das Laden MUSS beendet werden!
       setLoading(false);
     }
   };
 
-  // Wird aufgerufen, wenn man den Zusatz (z.B. "f") ändert
   const handleZusatzChange = (fachId, zusatz) => {
-    // Erzwingt Kleinschreibung direkt bei der Eingabe
-    const kleinerZusatz = zusatz.toLowerCase();
-
+    // FIX: Sicherstellen, dass zusatz ein String ist, bevor toLowerCase() gerufen wird
+    const rawZusatz = zusatz !== null && zusatz !== undefined ? String(zusatz) : '';
+    const kleinerZusatz = rawZusatz.toLowerCase();
+    
     setUserKlassen(prev => {
       if (!kleinerZusatz && !globalJahrgang) {
         const next = { ...prev };
@@ -68,22 +62,45 @@ export default function KlassenVerwaltung() {
     });
   };
 
-  // Hilfsfunktion, um den Zusatz ("f") aus dem gespeicherten "7f" zu extrahieren
   const getZusatz = (fachId) => {
-    const gespeicherterWert = userKlassen[fachId] || '';
-    if (!globalJahrgang) return gespeicherterWert;
-    return gespeicherterWert.startsWith(globalJahrgang) 
-      ? gespeicherterWert.replace(globalJahrgang, '') 
+    // FIX: Sicherstellen, dass alles ein String ist
+    const gespeicherterWert = String(userKlassen[fachId] || '');
+    const gj = String(globalJahrgang || '');
+    
+    if (!gj) return gespeicherterWert;
+    return gespeicherterWert.startsWith(gj) 
+      ? gespeicherterWert.substring(gj.length) // sicherer als replace, ersetzt nur am Anfang
       : gespeicherterWert;
+  };
+
+  // Wird aufgerufen, wenn sich das Dropdown ändert
+  const handleJahrgangChange = (neuerJahrgang) => {
+    setGlobalJahrgang(neuerJahrgang);
+    
+    // Wir passen alle bereits ausgewählten Fächer an den neuen Jahrgang an
+    setUserKlassen(prev => {
+      const next = { ...prev };
+      for (const fachId in next) {
+        const alterWert = String(next[fachId] || '');
+        // Extrahiere den reinen Zusatz (Buchstaben) vom alten Wert
+        const alterZusatz = alterWert.replace(/^\d+/, '');
+        // Setze den neuen Jahrgang + alten Zusatz
+        if (neuerJahrgang) {
+          next[fachId] = `${neuerJahrgang}${alterZusatz}`;
+        }
+      }
+      return next;
+    });
   };
 
   const saveKlassen = async () => {
     setSaving(true);
     setSaveMsg(null);
 
-    // Bereinige das Objekt vor dem Speichern
     const cleanKlassen = {};
     for (const [fachId, wert] of Object.entries(userKlassen)) {
+       // Nur speichern, wenn etwas drin steht und es nicht NUR der reine Jahrgang ohne Zusatz ist
+       // (Wenn Fächer ohne Zusatz gespeichert werden sollen, entferne "&& wert !== globalJahrgang")
        if (wert && wert !== globalJahrgang) {
            cleanKlassen[fachId] = wert;
        }
@@ -115,7 +132,7 @@ export default function KlassenVerwaltung() {
         </label>
         <select 
           value={globalJahrgang} 
-          onChange={(e) => setGlobalJahrgang(e.target.value)}
+          onChange={(e) => handleJahrgangChange(e.target.value)}
           style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #d1d5db', backgroundColor: '#ffffff', color: '#111827', fontSize: '1rem', boxSizing: 'border-box' }}
         >
           <option value="">-- Jahrgang wählen --</option>
