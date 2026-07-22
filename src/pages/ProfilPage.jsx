@@ -357,7 +357,8 @@ export default function ProfilPage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       <nav className="nav">
         <Link to="/dashboard" className="nav-logo">
-          <div className="nav-logo-icon"></div>VokabelApp
+          <div className="nav-logo-icon"></div>
+          VokabelApp
         </Link>
         <div className="nav-actions">
           <Link to="/dashboard" className="nav-btn">Zurück</Link>
