@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuthStore } from '../store/authStore.js'
@@ -32,12 +32,12 @@ export default function ProfilPage() {
   const isSchuljahrUpdate = searchParams.get('update') === 'schuljahr'
 
   const [profileInitialized, setProfileInitialized] = useState(false)
-  
+
   const [vorname, setVorname] = useState('')
   const [nachname, setNachname] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameMsg, setNameMsg] = useState(null)
-  
+
   const [pwNeu, setPwNeu] = useState('')
   const [pwWdh, setPwWdh] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
@@ -82,12 +82,15 @@ export default function ProfilPage() {
     setSavedBundesland(bl)
     setSavedOrt(ort)
     setSavedSchuleId(sid)
+
     setBundesland(bl)
     setOrtInput(ort)
     setOrtGewaehlt(ort)
     setSchuleId(sid)
+
     setEditOrt(!bl || !ort)
     setEditSchule(false)
+
     setProfileInitialized(true)
   }, [profile, roleLoading])
 
@@ -113,6 +116,7 @@ export default function ProfilPage() {
       if (ortInput.trim().length < 1) setOrtSuggestions([])
       return
     }
+
     const timeout = setTimeout(async () => {
       setLoadingOrte(true)
       const { data, error } = await supabase
@@ -123,6 +127,7 @@ export default function ProfilPage() {
         .not('ort', 'is', null)
         .order('ort')
         .limit(200)
+
       if (!error && data) {
         const unique = [...new Set(data.map(r => r.ort).filter(Boolean))].sort()
         setOrtSuggestions(unique)
@@ -132,19 +137,23 @@ export default function ProfilPage() {
       }
       setLoadingOrte(false)
     }, 220)
+
     return () => clearTimeout(timeout)
   }, [ortInput, bundesland, ortGewaehlt])
 
   useEffect(() => {
     const aktiverOrt = editOrt ? ortGewaehlt : savedOrt
     const aktivesBundesland = editOrt ? bundesland : savedBundesland
+
     if (!aktivesBundesland || !aktiverOrt) {
       setSchulen([])
       setSchulTypFilter('')
       return
     }
+
     setLoadingSchulen(true)
     setSchulTypFilter('')
+
     supabase
       .from('schulen')
       .select('id, name, schulart')
@@ -167,29 +176,101 @@ export default function ProfilPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const schultypen = [...new Set(schulen.map(s => s.schulart).filter(Boolean))].sort()
+  const gefilterteSchulen = schulTypFilter ? schulen.filter(s => s.schulart === schulTypFilter) : schulen
+
+  const hasSavedOrt = !!savedBundesland && !!savedOrt
+  const hasSavedSchule = !!savedSchuleId
+  const showOrtEditor = editOrt || !hasSavedOrt
+  const showSchuleCard = !!(showOrtEditor ? ortGewaehlt : savedOrt)
+  const showSchuleSelection = showSchuleCard && (!hasSavedSchule || editSchule || editOrt)
+
+  const ortAnzeige = savedOrt
+  const bundeslandAnzeige = BUNDESLAENDER.find(b => b.kuerzel === savedBundesland)?.name || savedBundesland
+
+  const handleOrtSelect = (ort) => {
+    setOrtInput(ort)
+    setOrtGewaehlt(ort)
+    setShowSuggestions(false)
+    setOrtSuggestions([])
+    setSchuleId('')
+    setSchuleMsg(null)
+    setOrtMsg(null)
+  }
+
+  const startOrtEdit = () => {
+    setEditOrt(true)
+    setEditSchule(false)
+    setBundesland(savedBundesland || '')
+    setOrtInput(savedOrt || '')
+    setOrtGewaehlt(savedOrt || '')
+    setSchuleId(savedSchuleId || '')
+    setOrtMsg(null)
+    setSchuleMsg(null)
+  }
+
+  const cancelOrtEdit = () => {
+    setEditOrt(false)
+    setBundesland(savedBundesland || '')
+    setOrtInput(savedOrt || '')
+    setOrtGewaehlt(savedOrt || '')
+    setSchuleId(savedSchuleId || '')
+    setOrtSuggestions([])
+    setShowSuggestions(false)
+    setOrtMsg(null)
+    setSchuleMsg(null)
+  }
+
+  const startSchuleEdit = () => {
+    setEditSchule(true)
+    setEditOrt(false)
+    setBundesland(savedBundesland || '')
+    setOrtInput(savedOrt || '')
+    setOrtGewaehlt(savedOrt || '')
+    setSchuleId(savedSchuleId || '')
+    setSchuleMsg(null)
+  }
+
+  const cancelSchuleEdit = () => {
+    setEditSchule(false)
+    setSchuleId(savedSchuleId || '')
+    setSchuleMsg(null)
+  }
+
   const handleOrtSave = async () => {
-    if (!bundesland || !ortGewaehlt.trim()) {
-      setOrtMsg({ ok: false, text: 'Bitte ein Bundesland und Ort wählen.' })
+    if (!bundesland) {
+      setOrtMsg({ ok: false, text: 'Bitte ein Bundesland auswählen.' })
       return
     }
+    if (!ortGewaehlt.trim()) {
+      setOrtMsg({ ok: false, text: 'Bitte einen Ort aus den Vorschlägen auswählen.' })
+      return
+    }
+
     setOrtSaving(true)
+    setOrtMsg(null)
+
     const { error } = await supabase
       .from('profiles')
       .update({ bundesland, ort: ortGewaehlt, schule_id: null })
       .eq('id', user.id)
+
     setOrtSaving(false)
+
     if (error) {
       setOrtMsg({ ok: false, text: error.message })
-    } else {
-      setSavedBundesland(bundesland)
-      setSavedOrt(ortGewaehlt)
-      setSavedSchuleId('')
-      setGespeicherteSchule(null)
-      setSchuleId('')
-      setEditOrt(false)
-      setEditSchule(false)
-      setOrtMsg({ ok: true, text: `Ort gespeichert: ${ortGewaehlt} ✓` })
+      return
     }
+
+    setSavedBundesland(bundesland)
+    setSavedOrt(ortGewaehlt)
+    setSavedSchuleId('')
+    setGespeicherteSchule(null)
+    setSchuleId('')
+    setEditOrt(false)
+    setEditSchule(false)
+    setOrtMsg({ ok: true, text: `Ort gespeichert: ${ortGewaehlt} ✓` })
+    setSchuleMsg(null)
   }
 
   const handleNameSave = async (e) => {
@@ -199,128 +280,340 @@ export default function ProfilPage() {
       return
     }
     setNameSaving(true)
+    setNameMsg(null)
     const { error } = await supabase
       .from('profiles')
       .update({ vorname: vorname.trim(), nachname: nachname.trim() })
       .eq('id', user.id)
+
     setNameSaving(false)
     setNameMsg(error ? { ok: false, text: error.message } : { ok: true, text: 'Name gespeichert ✓' })
   }
 
   const handlePwSave = async (e) => {
     e.preventDefault()
+    setPwMsg(null)
     if (pwNeu.length < 6) {
-      setPwMsg({ ok: false, text: 'Passwort muss min. 6 Zeichen haben.' })
+      setPwMsg({ ok: false, text: 'Passwort muss mindestens 6 Zeichen haben.' })
       return
     }
     if (pwNeu !== pwWdh) {
       setPwMsg({ ok: false, text: 'Passwörter stimmen nicht überein.' })
       return
     }
+
     setPwSaving(true)
     const { error } = await supabase.auth.updateUser({ password: pwNeu })
     setPwSaving(false)
+
     if (error) {
       setPwMsg({ ok: false, text: error.message })
-    } else {
-      setPwMsg({ ok: true, text: 'Passwort geändert ✓' })
-      setPwNeu('')
-      setPwWdh('')
+      return
     }
+
+    setPwMsg({ ok: true, text: 'Passwort geändert ✓' })
+    setPwNeu('')
+    setPwWdh('')
+  }
+
+  const handleSchuleSave = async (schuleIdParam) => {
+    const id = schuleIdParam || schuleId
+    setSchuleSaving(true)
+    setSchuleMsg(null)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ schule_id: id || null })
+      .eq('id', user.id)
+
+    setSchuleSaving(false)
+
+    if (error) {
+      setSchuleMsg({ ok: false, text: error.message })
+      return
+    }
+
+    setSchuleId(id)
+    setSavedSchuleId(id)
+    const ortFuerAnzeige = editOrt ? ortGewaehlt : savedOrt
+    const s = schulen.find(s => String(s.id) === String(id))
+    setGespeicherteSchule(s ? { ...s, ort: ortFuerAnzeige } : null)
+    setEditSchule(false)
+    setSchuleMsg({ ok: true, text: s ? `Schule gespeichert: ${s.name} ✓` : 'Gespeichert ✓' })
   }
 
   if (roleLoading || !profileInitialized) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f8fafc' }}>
-        <div style={{ color: '#6b7280', fontSize: '18px' }}>Lade Profil...</div>
+      <div className="page-center">
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+          <p>Lade Profil...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)', paddingBottom: '3rem' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       <nav className="nav">
         <Link to="/dashboard" className="nav-logo">
-          <div className="nav-logo-icon"></div>
-          VokabelApp
+          <div className="nav-logo-icon"></div>VokabelApp
         </Link>
         <div className="nav-actions">
           <Link to="/dashboard" className="nav-btn">Zurück</Link>
         </div>
       </nav>
 
-      <div className="main-content" style={{ maxWidth: '800px', margin: '0 auto', padding: '1.5rem' }}>
-        <div style={{ marginBottom: 24 }}>
+      <div className="main-content">
+        <div className="welcome-banner" style={{ marginBottom: 24 }}>
           <h2>Mein Profil</h2>
-          <p style={{ color: '#6b7280' }}>Verwalte hier deine persönlichen Daten, deine Schule und deine aktuellen Fächer.</p>
+          <p>Deine persönlichen Einstellungen verwalten.</p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* KLASSENVERWALTUNG WIRD HIER EINGEBUNDEN */}
-          <KlassenVerwaltung />
-          
-          {/* NAME */}
-          <div style={{ background: 'white', padding: "1.5rem", borderRadius: "1rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
-            <h3 style={{ fontSize: 16, marginBottom: 12 }}>Name ändern</h3>
-            <form onSubmit={handleNameSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input 
-                  type="text" 
-                  value={vorname} 
-                  onChange={e => setVorname(e.target.value)} 
-                  placeholder="Vorname" 
-                  style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #e5e7eb' }} 
-                />
-                <input 
-                  type="text" 
-                  value={nachname} 
-                  onChange={e => setNachname(e.target.value)} 
-                  placeholder="Nachname" 
-                  style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #e5e7eb' }} 
-                />
+        {isSchuljahrUpdate && (
+          <div style={{ background: '#dbeafe', color: '#0369a1', padding: '16px', borderRadius: '12px', marginBottom: '24px', border: '2px solid #bae6fd' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              Willkommen im neuen Schuljahr!
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.5 }}>
+              Bitte scrolle nach unten zur <strong>Klassenverwaltung</strong> und aktualisiere deine Jahrgänge und Klassen für das neue Schuljahr, bevor du weiterlernst.
+            </p>
+          </div>
+        )}
+
+        {/* Name */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={sectionTitle}>Name</h3>
+          <form onSubmit={handleNameSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={labelStyle}>Vorname</label>
+                <input className="input" type="text" value={vorname} onChange={e => setVorname(e.target.value)} placeholder="Vorname" style={{ width: '100%' }} />
               </div>
-              <button 
-                type="submit" 
-                disabled={nameSaving} 
-                style={{ padding: 10, borderRadius: 8, background: '#0f5156', color: 'white', border: 'none', fontWeight: 'bold' }}
-              >
-                {nameSaving ? 'Speichert...' : 'Name speichern'}
-              </button>
-              {nameMsg && <div style={{ color: nameMsg.ok ? '#10b981' : '#ef4444' }}>{nameMsg.text}</div>}
-            </form>
-          </div>
-
-          {/* PASSWORT */}
-          <div style={{ background: 'white', padding: "1.5rem", borderRadius: "1rem", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
-            <h3 style={{ fontSize: 16, marginBottom: 12 }}>Passwort ändern</h3>
-            <form onSubmit={handlePwSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <input 
-                type="password" 
-                value={pwNeu} 
-                onChange={e => setPwNeu(e.target.value)} 
-                placeholder="Neues Passwort (min. 6 Zeichen)" 
-                style={{ padding: 10, borderRadius: 8, border: '1px solid #e5e7eb' }} 
-              />
-              <input 
-                type="password" 
-                value={pwWdh} 
-                onChange={e => setPwWdh(e.target.value)} 
-                placeholder="Passwort wiederholen" 
-                style={{ padding: 10, borderRadius: 8, border: '1px solid #e5e7eb' }} 
-              />
-              <button 
-                type="submit" 
-                disabled={pwSaving} 
-                style={{ padding: 10, borderRadius: 8, background: '#0f5156', color: 'white', border: 'none', fontWeight: 'bold' }}
-              >
-                {pwSaving ? 'Speichert...' : 'Passwort ändern'}
-              </button>
-              {pwMsg && <div style={{ color: pwMsg.ok ? '#10b981' : '#ef4444' }}>{pwMsg.text}</div>}
-            </form>
-          </div>
-          
+              <div>
+                <label style={labelStyle}>Nachname</label>
+                <input className="input" type="text" value={nachname} onChange={e => setNachname(e.target.value)} placeholder="Nachname" style={{ width: '100%' }} />
+              </div>
+            </div>
+            {nameMsg && <Msg msg={nameMsg} />}
+            <button className="btn btn-primary" type="submit" disabled={nameSaving} style={{ alignSelf: 'flex-start' }}>
+              {nameSaving ? 'Speichern...' : 'Name speichern'}
+            </button>
+          </form>
         </div>
+
+        {/* Passwort */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={sectionTitle}>Passwort ändern</h3>
+          <form onSubmit={handlePwSave} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Neues Passwort</label>
+              <input className="input" type="password" value={pwNeu} onChange={e => setPwNeu(e.target.value)} placeholder="Mindestens 6 Zeichen" style={{ width: '100%' }} autoComplete="new-password" />
+            </div>
+            <div>
+              <label style={labelStyle}>Passwort wiederholen</label>
+              <input className="input" type="password" value={pwWdh} onChange={e => setPwWdh(e.target.value)} placeholder="Passwort bestätigen" style={{ width: '100%' }} autoComplete="new-password" />
+            </div>
+            {pwMsg && <Msg msg={pwMsg} />}
+            <button className="btn btn-primary" type="submit" disabled={pwSaving} style={{ alignSelf: 'flex-start' }}>
+              {pwSaving ? 'Speichern...' : 'Passwort ändern'}
+            </button>
+          </form>
+        </div>
+
+        {/* Bundesland & Ort */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={sectionTitle}>Bundesland & Ort</h3>
+          
+          {showOrtEditor ? (
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Bundesland</label>
+              <select 
+                className="input" 
+                value={bundesland} 
+                onChange={e => {
+                  setBundesland(e.target.value)
+                  setOrtInput('')
+                  setOrtGewaehlt('')
+                  setOrtSuggestions([])
+                  setSchuleId('')
+                  setOrtMsg(null)
+                  setSchuleMsg(null)
+                }}
+                style={{ width: '100%' }}
+              >
+                <option value="">-- Bundesland wählen --</option>
+                {BUNDESLAENDER.map(bl => (
+                  <option key={bl.kuerzel} value={bl.kuerzel}>{bl.name}</option>
+                ))}
+              </select>
+
+              {bundesland && (
+                <div style={{ marginTop: 14 }}>
+                  <label style={labelStyle}>Ort / Stadt</label>
+                  <div ref={ortRef} style={{ position: 'relative' }}>
+                    <input 
+                      className="input" 
+                      placeholder="Ort suchen..." 
+                      value={ortInput} 
+                      onChange={e => {
+                        setOrtInput(e.target.value)
+                        setOrtGewaehlt('')
+                        setShowSuggestions(true)
+                        setSchuleId('')
+                        setSchuleMsg(null)
+                      }}
+                      onFocus={() => { if(ortInput.length > 1) setShowSuggestions(true) }}
+                      style={{ width: '100%' }}
+                      autoComplete="off"
+                    />
+                    
+                    {loadingOrte && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Suche...</p>}
+                    
+                    {showSuggestions && ortSuggestions.length > 0 && (
+                      <ul style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: 'var(--surface, #fff)', border: '1px solid var(--border, #e0e0e0)', borderRadius: 8, marginTop: 2, padding: 0, listStyle: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto' }}>
+                        {ortSuggestions.map(o => (
+                          <li 
+                            key={o} 
+                            onMouseDown={() => handleOrtSelect(o)}
+                            style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid var(--border, #f0f0f0)', background: ortGewaehlt === o ? 'oklch(from var(--primary, #01696f) l c h / 0.08)' : 'transparent' }}
+                            onMouseEnter={e => e.currentTarget.style.background = ortGewaehlt === o ? 'oklch(from var(--primary, #01696f) l c h / 0.07)' : '#f8f9fa'}
+                            onMouseLeave={e => e.currentTarget.style.background = ortGewaehlt === o ? 'oklch(from var(--primary, #01696f) l c h / 0.08)' : 'transparent'}
+                          >
+                            {o}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {showSuggestions && !loadingOrte && ortInput.length > 1 && ortSuggestions.length === 0 && ortGewaehlt !== ortInput && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: 'var(--surface, #fff)', border: '1px solid var(--border, #e0e0e0)', borderRadius: 8, marginTop: 2, padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+                        Kein Ort gefunden für "{ortInput}".
+                      </div>
+                    )}
+                  </div>
+                  {ortInput && !ortGewaehlt && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Ort aus der Liste wählen!</p>}
+                </div>
+              )}
+
+              {ortMsg && <div style={{ marginTop: 10 }}><Msg msg={ortMsg} /></div>}
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                {bundesland && ortGewaehlt && (
+                  <button className="btn btn-primary" type="button" onClick={handleOrtSave} disabled={ortSaving}>
+                    {ortSaving ? 'Speichern...' : 'Ort speichern'}
+                  </button>
+                )}
+                {hasSavedOrt && editOrt && (
+                  <button className="btn" type="button" onClick={cancelOrtEdit}>Abbrechen</button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '12px 14px', borderRadius: 10, border: '2px solid var(--primary, #01696f)', background: 'oklch(from var(--primary, #01696f) l c h / 0.07)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Gespeicherter Ort</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{ortAnzeige}</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>{bundeslandAnzeige}</div>
+              <button type="button" className="btn" onClick={startOrtEdit} style={{ marginTop: 12, fontSize: 13 }}>Ort ändern</button>
+            </div>
+          )}
+        </div>
+
+        {/* Schule */}
+        {showSchuleCard && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 style={sectionTitle}>Schule</h3>
+            
+            {hasSavedSchule && !showSchuleSelection ? (
+              <div>
+                {loadingGespeicherteSchule ? (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lade Schule...</p>
+                ) : gespeicherteSchule ? (
+                  <div style={{ padding: '12px 14px', borderRadius: 10, border: '2px solid var(--primary, #01696f)', background: 'oklch(from var(--primary, #01696f) l c h / 0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Deine Schule</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{gespeicherteSchule.name}</div>
+                      <div style={{ marginTop: 4, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {gespeicherteSchule.schulart && <span style={badgeStyle}>{gespeicherteSchule.schulart}</span>}
+                        {gespeicherteSchule.ort && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{gespeicherteSchule.ort}</span>}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 22, color: 'var(--primary, #01696f)', flexShrink: 0 }}>✓</span>
+                  </div>
+                ) : null}
+                {!editOrt && (
+                  <button type="button" onClick={startSchuleEdit} style={aenderungsLinkStyle}>Schule ändern</button>
+                )}
+                {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
+              </div>
+            ) : (
+              <div>
+                {editSchule && hasSavedSchule && !editOrt && (
+                  <button type="button" className="btn" onClick={cancelSchuleEdit} style={{ fontSize: 13, marginBottom: 14 }}>Abbrechen</button>
+                )}
+                
+                {loadingSchulen ? (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Schulen werden geladen...</p>
+                ) : schulen.length === 0 ? (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Keine Schulen für diesen Ort gefunden.</p>
+                ) : (
+                  <>
+                    {schulen.length > 3 && schultypen.length > 1 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>Schultyp filtern</label>
+                        <select className="input" value={schulTypFilter} onChange={e => setSchulTypFilter(e.target.value)} style={{ width: '100%' }}>
+                          <option value="">Alle Schultypen ({schulen.length})</option>
+                          {schultypen.map(t => (
+                            <option key={t} value={t}>{t} ({schulen.filter(s => s.schulart === t).length})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {gefilterteSchulen.map(s => {
+                        const isSelected = String(s.id) === String(schuleId || savedSchuleId)
+                        return (
+                          <div 
+                            key={s.id} 
+                            onClick={() => handleSchuleSave(s.id)}
+                            style={{ padding: '12px 14px', borderRadius: 10, cursor: 'pointer', border: isSelected ? '2px solid var(--primary, #01696f)' : '1px solid var(--border, #e0e0e0)', background: isSelected ? 'oklch(from var(--primary, #01696f) l c h / 0.07)' : 'var(--surface, #fff)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, transition: 'all 0.15s ease' }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{s.name}</div>
+                              {s.schulart && <span style={badgeStyle}>{s.schulart}</span>}
+                            </div>
+                            {isSelected && <span style={{ fontSize: 18, color: 'var(--primary, #01696f)', flexShrink: 0 }}>✓</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+                {schuleMsg && <div style={{ marginTop: 10 }}><Msg msg={schuleMsg} /></div>}
+                {schuleSaving && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Wird gespeichert...</p>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* KLASSENVERWALTUNG WIRD HIER EINGEBUNDEN */}
+        {profileInitialized && <KlassenVerwaltung />}
+
       </div>
     </div>
   )
 }
+
+function Msg({ msg }) {
+  return (
+    <p style={{ fontSize: 13, padding: '7px 12px', borderRadius: 8, background: msg.ok ? 'oklch(from var(--primary, #01696f) l c h / 0.10)' : 'oklch(from var(--error, #a12c7b) l c h / 0.08)', color: msg.ok ? 'var(--primary, #01696f)' : 'var(--error, #a12c7b)', border: msg.ok ? '1px solid oklch(from var(--primary, #01696f) l c h / 0.25)' : '1px solid oklch(from var(--error, #a12c7b) l c h / 0.25)', margin: 0 }}>
+      {msg.text}
+    </p>
+  )
+}
+
+const labelStyle = { display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }
+const sectionTitle = { fontSize: 15, fontWeight: 700, marginBottom: 14, color: 'var(--text)' }
+const badgeStyle = { display: 'inline-block', marginTop: 3, background: 'oklch(from var(--primary, #01696f) l c h / 0.10)', color: 'var(--primary, #01696f)', borderRadius: 4, padding: '1px 7px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em' }
+const aenderungsLinkStyle = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, color: 'var(--primary, #01696f)', textDecoration: 'underline', textUnderlineOffset: 3, fontWeight: 600 }
