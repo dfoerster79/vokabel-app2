@@ -60,18 +60,22 @@ export default function LernenPage() {
     const fetchTests = async () => {
       setLoadingTests(true);
 
-      // Profil des Nutzers holen: schule_id + jahrgang
+      // Profil holen: schule_id + klasse_pro_fach (JSONB)
       const { data: profile } = await supabase
         .from('profiles')
-        .select('schule_id, jahrgang')
+        .select('schule_id, klasse_pro_fach')
         .eq('id', user.id)
         .single();
 
       const userSchuleId = profile?.schule_id;
-      const userJahrgang = profile?.jahrgang;
 
-      // FIX: gewaehltesFach ist ein Objekt { id, name } → nur die .id übergeben
+      // FIX: fachId korrekt aus Objekt extrahieren
       const fachId = gewaehltesFach?.id ?? gewaehltesFach;
+
+      // Jahrgang fach-spezifisch aus klasse_pro_fach lesen
+      // Struktur: { "2": { jahrgang: 6, klasse_name: "6fg" }, ... }
+      const fachKey = String(fachId);
+      const userJahrgang = profile?.klasse_pro_fach?.[fachKey]?.jahrgang ?? null;
 
       let query = supabase
         .from('vokabel_tests')
