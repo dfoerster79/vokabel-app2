@@ -53,24 +53,24 @@ export default function LernenPage() {
     }
   };
 
-  // 2. Tests laden, wenn Fach gewählt (GEFILTERT NACH SCHULE)
+  // Tests laden, wenn Fach gewählt (gefiltert nach Schule UND Jahrgang)
   useEffect(() => {
     if (!gewaehltesFach || !user) return;
-    
+
     const fetchTests = async () => {
       setLoadingTests(true);
 
-      // 1. Zuerst die Schule des aktuellen Nutzers holen
+      // Profil des Nutzers holen: schule_id + jahrgang
       const { data: profile } = await supabase
         .from('profiles')
-        .select('schule_id')
+        .select('schule_id, jahrgang')
         .eq('id', user.id)
         .single();
 
       const userSchuleId = profile?.schule_id;
+      const userJahrgang = profile?.jahrgang;
 
-      // 2. Tests laden und nach Fach UND Schule filtern
-      // FIX: gewaehltesFach ist ein Objekt { id, name } → nur die .id übergeben!
+      // FIX: gewaehltesFach ist ein Objekt { id, name } → nur die .id übergeben
       const fachId = gewaehltesFach?.id ?? gewaehltesFach;
 
       let query = supabase
@@ -78,13 +78,18 @@ export default function LernenPage() {
         .select('id, name, jahrgang, buecher(name)')
         .eq('fach_id', fachId);
 
-      // Nur nach Schule filtern, wenn der User auch eine Schule hinterlegt hat
+      // Nach Schule filtern, wenn vorhanden
       if (userSchuleId) {
         query = query.eq('schule_id', userSchuleId);
       }
 
+      // Nach Jahrgang filtern, wenn vorhanden
+      if (userJahrgang) {
+        query = query.eq('jahrgang', userJahrgang);
+      }
+
       const { data } = await query.order('jahrgang').order('name');
-      
+
       setTests(data || []);
       setLoadingTests(false);
     };
@@ -140,15 +145,15 @@ export default function LernenPage() {
   const schritte = ["Fach", "Lektion", "Start"];
 
   if (loadingFaecher) return <div style={{ padding: "2rem", textAlign: "center" }}>Lade Daten...</div>;
-    return (
+  return (
     <div style={{ backgroundColor: "#f8fafc", minHeight: "100vh", paddingBottom: "5rem", fontFamily: "sans-serif" }}>
-      
+
       {/* Menüleiste ganz oben */}
       <div style={{ backgroundColor: "white", padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb", marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", fontSize: "1.2rem", color: "#0f5156" }}>
           📚 VokabelApp
         </div>
-        <button 
+        <button
           onClick={() => navigate('/dashboard')}
           style={{ background: "none", border: "none", color: "#6b7280", fontSize: "0.9rem", cursor: "pointer" }}
         >
@@ -157,8 +162,8 @@ export default function LernenPage() {
       </div>
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 1rem" }}>
-        
-        {/* 1) Große grüne Karte als Header MIT VERLAUF */}
+
+        {/* Header */}
         <div style={{ background: "linear-gradient(135deg, #0f5156 0%, #167a7f 100%)", padding: "1.5rem", borderRadius: "1rem", marginBottom: "2.5rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
           <h2 style={{ margin: 0, color: "white", fontSize: 22, display: "flex", alignItems: "center", gap: 8 }}>
             🧠 Lern-Modus
@@ -167,32 +172,30 @@ export default function LernenPage() {
             Wähle dein Fach und die Lektion, die du heute trainieren möchtest.
           </p>
         </div>
-        
-        {/* 2) Stepper (Dunkle Kreise mit hellem Schein) */}
+
+        {/* Stepper */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3rem", position: "relative" }}>
-          {/* Graue Linie im Hintergrund */}
           <div style={{ position: "absolute", top: 15, left: "15%", right: "15%", height: 2, backgroundColor: "#e5e7eb", zIndex: 0 }} />
-          {/* Grüne Linie für Fortschritt */}
           <div style={{ position: "absolute", top: 15, left: "15%", width: currentStep === 1 ? "0%" : currentStep === 2 ? "35%" : "70%", height: 2, backgroundColor: "#0f5156", zIndex: 0, transition: "width 0.3s ease-in-out" }} />
-          
+
           {schritte.map((s, i) => {
             const stepNum = i + 1;
             const active = currentStep >= stepNum;
             const isCurrent = currentStep === stepNum;
             return (
               <div key={s} style={{ zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, width: "33%" }}>
-                <div 
+                <div
                   onClick={() => {
-                     if (active && stepNum === 1) setCurrentStep(1);
-                     if (active && stepNum === 2 && gewaehltesFach) setCurrentStep(2);
+                    if (active && stepNum === 1) setCurrentStep(1);
+                    if (active && stepNum === 2 && gewaehltesFach) setCurrentStep(2);
                   }}
-                  style={{ 
-                    width: 32, height: 32, borderRadius: "50%", 
-                    backgroundColor: active ? "#0f5156" : "white", 
-                    border: active ? "none" : "2px solid #e5e7eb", 
-                    boxShadow: active ? `0 0 0 4px ${BRAND_LIGHT}` : "none", 
-                    color: active ? "white" : "#9ca3af", 
-                    display: "flex", alignItems: "center", justifyContent: "center", 
+                  style={{
+                    width: 32, height: 32, borderRadius: "50%",
+                    backgroundColor: active ? "#0f5156" : "white",
+                    border: active ? "none" : "2px solid #e5e7eb",
+                    boxShadow: active ? `0 0 0 4px ${BRAND_LIGHT}` : "none",
+                    color: active ? "white" : "#9ca3af",
+                    display: "flex", alignItems: "center", justifyContent: "center",
                     fontWeight: "bold", fontSize: 14, cursor: active ? "pointer" : "default",
                     transition: "all 0.2s"
                   }}
@@ -207,7 +210,7 @@ export default function LernenPage() {
           })}
         </div>
 
-        {/* --- FAVORITEN SCHNELLZUGRIFF --- */}
+        {/* Favoriten Schnellzugriff */}
         {favoritenDetails.length > 0 && currentStep === 1 && (
           <div style={{ marginBottom: "2.5rem" }}>
             <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
@@ -264,7 +267,7 @@ export default function LernenPage() {
             <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
               Lektion für {gewaehltesFach?.name}
             </div>
-            
+
             {loadingTests ? (
               <div style={{ color: "#6b7280", textAlign: "center", padding: "2rem" }}>Lade Lektionen...</div>
             ) : tests.length === 0 ? (
@@ -275,7 +278,6 @@ export default function LernenPage() {
                   const isFav = favoriten.includes(test.id);
                   return (
                     <div key={test.id} style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
-                      
                       <button
                         onClick={(e) => toggleFavorit(e, test.id)}
                         style={{ background: "white", border: "none", borderRadius: "1rem", width: 50, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", transition: "transform 0.1s" }}
@@ -308,7 +310,7 @@ export default function LernenPage() {
             <div style={{ fontSize: 12, fontWeight: "bold", color: "#9ca3af", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
               Trainingsmodus für "{gewaehlterTest?.name}"
             </div>
-              
+
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 30 }}>
               <button
                 onClick={() => setTestart("multiple_choice")}
