@@ -70,10 +70,13 @@ export default function LernenPage() {
       const userSchuleId = profile?.schule_id;
 
       // 2. Tests laden und nach Fach UND Schule filtern
+      // FIX: gewaehltesFach ist ein Objekt { id, name } → nur die .id übergeben!
+      const fachId = gewaehltesFach?.id ?? gewaehltesFach;
+
       let query = supabase
         .from('vokabel_tests')
         .select('id, name, jahrgang, buecher(name)')
-        .eq('fach_id', gewaehltesFach);
+        .eq('fach_id', fachId);
 
       // Nur nach Schule filtern, wenn der User auch eine Schule hinterlegt hat
       if (userSchuleId) {
