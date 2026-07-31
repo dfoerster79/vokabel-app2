@@ -3,6 +3,23 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../store/authStore.js";
 
+// Wortarten-Katalog (spiegelt die DB-Tabelle wider, für Offline-Fallback)
+const WORTARTEN_FALLBACK = [
+  { id: "noun",        label_de: "Nomen" },
+  { id: "verb",        label_de: "Verb" },
+  { id: "adjective",   label_de: "Adjektiv" },
+  { id: "adverb",      label_de: "Adverb" },
+  { id: "pronoun",     label_de: "Pronomen" },
+  { id: "preposition", label_de: "Präposition" },
+  { id: "conjunction", label_de: "Konjunktion" },
+  { id: "determiner",  label_de: "Artikel/Det." },
+  { id: "numeral",     label_de: "Zahlwort" },
+  { id: "interjection",label_de: "Interjektion" },
+  { id: "particle",    label_de: "Partikel" },
+  { id: "phrase",      label_de: "Wendung" },
+  { id: "other",       label_de: "Sonstiges" },
+];
+
 export default function FotoTestPage() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -18,16 +35,25 @@ export default function FotoTestPage() {
   const [bild, setBild] = useState(null);
   const [bildPreview, setBildPreview] = useState(null);
   const [scanning, setScanning] = useState(false);
-  
+
   const [vokabeln, setVokabeln] = useState([]);
   const [seitenzahl, setSeitenzahl] = useState("");
   const [existingTestId, setExistingTestId] = useState(null);
   const [existingVokabeln, setExistingVokabeln] = useState([]);
 
+  // Wortarten aus der DB laden
+  const [wortarten, setWortarten] = useState(WORTARTEN_FALLBACK);
+
   const [schritt, setSchritt] = useState(1);
   const [profil, setProfil] = useState(null);
   const [fehler, setFehler] = useState("");
   const fileRef = useRef();
+
+  // Wortarten aus Supabase laden
+  useEffect(() => {
+    supabase.from("wortarten").select("id, label_de").order("id")
+      .then(({ data }) => { if (data && data.length > 0) setWortarten(data); });
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -109,6 +135,7 @@ export default function FotoTestPage() {
     reader.onloadend = async () => {
       try {
         const base64 = reader.result.split(",")[1];
+        // API-Aufruf: jetzt auch wortart_id + wortart_konfidenz im Response erwartet
         const res = await fetch("/api/scan-vokabeln", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -116,7 +143,14 @@ export default function FotoTestPage() {
         });
         if (!res.ok) throw new Error("Fehler beim KI-Scan");
         const data = await res.json();
-        setVokabeln(data.vokabeln || []);
+        // Wortart-Felder ergänzen falls die API sie noch nicht liefert
+        const mitWortart = (data.vokabeln || []).map(v => ({
+          ...v,
+          wortart_id: v.wortart_id || "other",
+          wortart_konfidenz: v.wortart_konfidenz || null,
+          wortart_bestaetigt: false,
+        }));
+        setVokabeln(mitWortart);
         await checkSeitenzahl(data.seitenzahl || "");
         setSchritt(4);
       } catch (e) {
@@ -131,6 +165,10 @@ export default function FotoTestPage() {
   const handleVokabelEdit = (index, field, value) => {
     const neu = [...vokabeln];
     neu[index][field] = value;
+    // Wenn Nutzer Wortart manuell ändert: als bestätigt markieren
+    if (field === "wortart_id") {
+      neu[index].wortart_bestaetigt = true;
+    }
     setVokabeln(neu);
   };
 
@@ -138,18 +176,14 @@ export default function FotoTestPage() {
     setVokabeln(vokabeln.filter((_, i) => i !== index));
   };
 
-  // Vergleicht eine Vokabel mit dem bestehenden Bestand
   const getVokabelStatus = (vok) => {
-    if (!existingTestId || existingVokabeln.length === 0) return "new"; // Wenn Seite neu ist, ist alles neu
-    
+    if (!existingTestId || existingVokabeln.length === 0) return "new";
     const vOriginal = (vok.original || "").trim().toLowerCase();
     const vUebersetzung = (vok.uebersetzung || "").trim().toLowerCase();
-    
     const match = existingVokabeln.find(ev => (ev.original || "").trim().toLowerCase() === vOriginal);
-    
-    if (!match) return "new"; // Komplett neu
-    if ((match.uebersetzung || "").trim().toLowerCase() !== vUebersetzung) return "conflict"; // Original existiert, aber Übersetzung weicht ab
-    return "duplicate"; // Existiert exakt so
+    if (!match) return "new";
+    if ((match.uebersetzung || "").trim().toLowerCase() !== vUebersetzung) return "conflict";
+    return "duplicate";
   };
 
   const handleSpeichern = async () => {
@@ -166,11 +200,7 @@ export default function FotoTestPage() {
         if (error) return setFehler("Fehler beim Buch anlegen: " + error.message);
         buchId = neuesBuch.id;
       }
-      // Auslesen der Klassen-Info für das spezifische Fach
       const fachInfo = profil?.klasse_pro_fach?.[selectedFach.id] || {};
-      const aktuellerJahrgang = fachInfo.jahrgang || null;
-      const aktuelleKlasse = fachInfo.klasse_name || null;
-
       const { data: test, error: testError } = await supabase
         .from("vokabel_tests")
         .insert({
@@ -179,34 +209,65 @@ export default function FotoTestPage() {
           fach_id: selectedFach.id,
           schule_id: profil?.schule_id || null,
           user_id: user.id,
-          jahrgang: aktuellerJahrgang,
-          klasse: aktuelleKlasse
+          jahrgang: fachInfo.jahrgang || null,
+          klasse: fachInfo.klasse_name || null
         })
         .select().single();
       if (testError) return setFehler("Fehler beim Test anlegen: " + testError.message);
       testId = test.id;
     }
 
-    // Nur Vokabeln speichern, die nicht "duplicate" sind
     const voksToSave = vokabeln.filter(v => getVokabelStatus(v) !== "duplicate");
-    
+
     if (voksToSave.length > 0) {
-      const { error: vokError } = await supabase.from("vokabeln").insert(
-        voksToSave.map(v => ({
-          test_id: testId,
-          original: v.original,
-          uebersetzung: v.uebersetzung,
-          beispielsatz: v.beispielsatz || null,
-          ki_unsicher: v.ki_unsicher || false
-        }))
-      );
+      // 1) Vokabeln speichern
+      const { data: gespeichert, error: vokError } = await supabase
+        .from("vokabeln")
+        .insert(
+          voksToSave.map(v => ({
+            test_id: testId,
+            original: v.original,
+            uebersetzung: v.uebersetzung,
+            beispielsatz: v.beispielsatz || null,
+            ki_unsicher: v.ki_unsicher || false
+          }))
+        )
+        .select("id");
       if (vokError) return setFehler("Fehler beim Vokabeln speichern: " + vokError.message);
+
+      // 2) Wortart-Zuordnungen speichern
+      const wortartZuordnungen = gespeichert
+        .map((row, idx) => {
+          const v = voksToSave[idx];
+          if (!v.wortart_id || v.wortart_id === "") return null;
+          return {
+            vokabel_id: row.id,
+            wortart_id: v.wortart_id,
+            quelle: v.wortart_bestaetigt ? "nutzer" : "ki",
+            konfidenz: v.wortart_konfidenz ?? null,
+            bestaetigt: v.wortart_bestaetigt || false,
+          };
+        })
+        .filter(Boolean);
+
+      if (wortartZuordnungen.length > 0) {
+        const { error: waError } = await supabase
+          .from("vokabeln_wortarten")
+          .insert(wortartZuordnungen);
+        if (waError) {
+          // Wortart-Fehler nicht blockierend – Vokabeln wurden bereits gespeichert
+          console.warn("Wortart-Zuordnung fehlgeschlagen:", waError.message);
+        }
+      }
     }
-    
+
     navigate("/dashboard");
   };
 
   const schritte = ["Sprache", "Buch", "Foto", "Prüfen"];
+
+  // Hilfsfunktion: Label einer Wortart-ID
+  const wortartLabel = (id) => wortarten.find(w => w.id === id)?.label_de || id;
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--bg)" }}>
@@ -230,7 +291,6 @@ export default function FotoTestPage() {
         <div style={{ position: "relative", display: "flex", justifyContent: "space-between", margin: "24px 0 32px" }}>
           <div style={{ position: "absolute", top: 14, left: "10%", right: "10%", height: 4, background: "#e5e7eb", zIndex: 0, borderRadius: 2 }}></div>
           <div style={{ position: "absolute", top: 14, left: "10%", width: `${((schritt - 1) / 3) * 80}%`, height: 4, background: "var(--primary, #0d9488)", zIndex: 0, borderRadius: 2, transition: "width 0.3s ease" }}></div>
-          
           {schritte.map((label, i) => {
             const isActive = schritt >= i + 1;
             const isCurrent = schritt === i + 1;
@@ -284,12 +344,9 @@ export default function FotoTestPage() {
               <p style={{ margin: "0 0 4px", color: "var(--text-muted)", fontSize: 13 }}>Gewählte Sprache</p>
               <strong>{selectedFach?.symbol} {selectedFach?.name}</strong>
             </div>
-
             {buchModus === "vorschlag" && vorgeschlagenesBuch && (
               <div>
-                <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 8 }}>
-                  📚 Zuletzt verwendetes Buch an Ihrer Schule:
-                </p>
+                <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 8 }}>📚 Zuletzt verwendetes Buch an Ihrer Schule:</p>
                 <button className="menu-card"
                   onClick={() => { setSelectedBuch(vorgeschlagenesBuch); setSchritt(3); }}
                   style={{ width: "100%", border: "2px solid var(--primary, #0d9488)", cursor: "pointer", marginBottom: 10 }}>
@@ -302,7 +359,6 @@ export default function FotoTestPage() {
                 </button>
               </div>
             )}
-
             {buchModus === "liste" && (
               <div>
                 {buecher.length > 0 ? buecher.map(b => (
@@ -326,7 +382,6 @@ export default function FotoTestPage() {
                 </button>
               </div>
             )}
-
             {buchModus === "neu" && (
               <div className="card">
                 <p style={{ margin: "0 0 12px", fontWeight: 600 }}>Neues Buch anlegen</p>
@@ -353,9 +408,7 @@ export default function FotoTestPage() {
             <div className="card" style={{ marginBottom: 12 }}>
               <p style={{ margin: "0 0 2px", color: "var(--text-muted)", fontSize: 13 }}>Buch & Sprache</p>
               <strong>📖 {selectedBuch?.name || neuesBuchName}</strong>
-              <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>
-                {selectedFach?.symbol} {selectedFach?.name}
-              </span>
+              <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{selectedFach?.symbol} {selectedFach?.name}</span>
             </div>
             <input type="file" accept="image/*" capture="environment" ref={fileRef} onChange={handleBildWahl} style={{ display: "none" }} />
             <button className="btn btn-primary" style={{ width: "100%", marginBottom: 12 }} onClick={() => fileRef.current.click()}>
@@ -379,7 +432,7 @@ export default function FotoTestPage() {
         {schritt === 4 && (
           <div>
             <p className="section-title">Vokabeln prüfen & bestätigen</p>
-            
+
             <div className="card" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ color: "var(--text-muted)", fontSize: 14 }}>Seitenzahl:</span>
               <input value={seitenzahl} onChange={e => checkSeitenzahl(e.target.value)}
@@ -401,31 +454,27 @@ export default function FotoTestPage() {
               </div>
             )}
 
+            {/* Wortarten-Legende */}
+            <div className="card" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", marginBottom: 16, fontSize: 13, color: "#166534" }}>
+              🏷️ <strong>Wortart</strong>: Die KI schlägt automatisch eine Wortart vor. Du kannst sie vor dem Speichern korrigieren.
+              Beim Test werden dann nur Wörter der gleichen Wortart als falsche Antworten angeboten.
+            </div>
+
             {vokabeln.map((v, i) => {
               const status = getVokabelStatus(v);
-              
               let bgColor = "white";
               let borderColor = "#e5e7eb";
-              
-              if (v.ki_unsicher) {
-                bgColor = "#fff8e1"; // orange tint
-                borderColor = "#FF9800";
-              } else if (existingTestId) {
-                if (status === "new") {
-                  bgColor = "#dcfce7"; // green tint (new)
-                  borderColor = "#86efac";
-                } else if (status === "conflict") {
-                  bgColor = "#fef08a"; // yellow tint (conflict)
-                  borderColor = "#fde047";
-                } else {
-                  bgColor = "#f3f4f6"; // gray tint (duplicate)
-                  borderColor = "#e5e7eb";
-                }
+              if (v.ki_unsicher) { bgColor = "#fff8e1"; borderColor = "#FF9800"; }
+              else if (existingTestId) {
+                if (status === "new") { bgColor = "#dcfce7"; borderColor = "#86efac"; }
+                else if (status === "conflict") { bgColor = "#fef08a"; borderColor = "#fde047"; }
+                else { bgColor = "#f3f4f6"; borderColor = "#e5e7eb"; }
               }
 
               return (
                 <div key={i} className="card" style={{
-                  marginBottom: 8, padding: 12, border: `1px solid ${borderColor}`, background: bgColor, opacity: status === "duplicate" ? 0.7 : 1
+                  marginBottom: 10, padding: 12, border: `1px solid ${borderColor}`,
+                  background: bgColor, opacity: status === "duplicate" ? 0.7 : 1
                 }}>
                   {v.ki_unsicher && (
                     <div style={{ color: "#E65100", fontSize: 12, marginBottom: 6 }}>⚠️ Unsicher erkannt – bitte prüfen</div>
@@ -438,8 +487,9 @@ export default function FotoTestPage() {
                   {status === "duplicate" && (
                     <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>ℹ️ Wird übersprungen (bereits vorhanden)</div>
                   )}
-                  
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+
+                  {/* Zeile 1: Original → Übersetzung + Löschen */}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
                     <input value={v.original} onChange={e => handleVokabelEdit(i, "original", e.target.value)}
                       disabled={status === "duplicate"}
                       style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 14, background: "transparent" }} />
@@ -451,6 +501,45 @@ export default function FotoTestPage() {
                       style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 16 }}>
                       ✕
                     </button>
+                  </div>
+
+                  {/* Zeile 2: Wortart-Auswahl */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>🏷️ Wortart:</span>
+                    <select
+                      value={v.wortart_id || "other"}
+                      disabled={status === "duplicate"}
+                      onChange={e => handleVokabelEdit(i, "wortart_id", e.target.value)}
+                      style={{
+                        padding: "5px 8px", borderRadius: 8, fontSize: 13,
+                        border: v.wortart_bestaetigt
+                          ? "2px solid var(--primary, #0d9488)"
+                          : "1px solid #d1d5db",
+                        background: v.wortart_bestaetigt ? "#f0fdf4" : "white",
+                        cursor: status === "duplicate" ? "default" : "pointer",
+                        color: "var(--text)"
+                      }}
+                    >
+                      {wortarten.map(w => (
+                        <option key={w.id} value={w.id}>{w.label_de}</option>
+                      ))}
+                    </select>
+                    {/* KI-Konfidenz-Anzeige */}
+                    {v.wortart_konfidenz != null && !v.wortart_bestaetigt && (
+                      <span style={{
+                        fontSize: 11,
+                        color: v.wortart_konfidenz >= 0.8 ? "#166534" : v.wortart_konfidenz >= 0.5 ? "#92400e" : "#991b1b",
+                        background: v.wortart_konfidenz >= 0.8 ? "#dcfce7" : v.wortart_konfidenz >= 0.5 ? "#fef3c7" : "#fee2e2",
+                        borderRadius: 6, padding: "2px 7px"
+                      }}>
+                        KI: {Math.round(v.wortart_konfidenz * 100)}%
+                      </span>
+                    )}
+                    {v.wortart_bestaetigt && (
+                      <span style={{ fontSize: 11, color: "#166534", background: "#dcfce7", borderRadius: 6, padding: "2px 7px" }}>
+                        ✓ bestätigt
+                      </span>
+                    )}
                   </div>
                 </div>
               );
