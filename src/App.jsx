@@ -11,12 +11,12 @@ import OrteImportPage from './pages/OrteImportPage.jsx'
 import ProfilPage from './pages/ProfilPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 import FotoTestPage from './pages/FotoTestPage.jsx'
-import SprachTestPage from './pages/SprachTestPage.jsx'  // NEU
+import SprachTestPage from './pages/SprachTestPage.jsx'
 import { useAuthStore } from './store/authStore.js'
 import AdminFachuebersichtPage from './pages/AdminFachuebersichtPage.jsx'
 import LernenPage from './pages/LernenPage.jsx'
 import RanglistePage from './pages/RanglistePage.jsx'
-import MultipleChoicePage from './pages/MultipleChoicePage';
+import MultipleChoicePage from './pages/MultipleChoicePage.jsx'
 
 export default function App() {
   const user = useAuthStore(s => s.user)
@@ -37,7 +37,7 @@ export default function App() {
       <Route path="/admin/schulen-import" element={user ? <SchulenImportPage /> : <Navigate to="/" />} />
       <Route path="/admin/orte-import" element={user ? <OrteImportPage /> : <Navigate to="/" />} />
       <Route path="/lernen/multiple_choice/:testId" element={<MultipleChoicePage />} />
-      <Route path="/lernen/sprache/:testId" element={<SprachTestPage />} />  {/* NEU */}
+      <Route path="/lernen/sprache/:testId" element={<SprachTestPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
