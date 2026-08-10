@@ -10,7 +10,8 @@ import SchulenImportPage from './pages/SchulenImportPage.jsx'
 import OrteImportPage from './pages/OrteImportPage.jsx'
 import ProfilPage from './pages/ProfilPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
-import FotoTestPage from './pages/FotoTestPage.jsx'  // NEU
+import FotoTestPage from './pages/FotoTestPage.jsx'
+import SprachTestPage from './pages/SprachTestPage.jsx'  // NEU
 import { useAuthStore } from './store/authStore.js'
 import AdminFachuebersichtPage from './pages/AdminFachuebersichtPage.jsx'
 import LernenPage from './pages/LernenPage.jsx'
@@ -29,13 +30,14 @@ export default function App() {
       <Route path="/admin/fachuebersicht" element={<AdminFachuebersichtPage />} />
       <Route path="/profil" element={user ? <ProfilPage /> : <Navigate to="/" />} />
       <Route path="/lernen" element={<LernenPage />} />
-      <Route path="/neuer-test" element={user ? <FotoTestPage /> : <Navigate to="/" />} />  {/* NEU */}
+      <Route path="/neuer-test" element={user ? <FotoTestPage /> : <Navigate to="/" />} />
       <Route path="/admin" element={user ? <AdminPage /> : <Navigate to="/" />} />
       <Route path="/admin/schulen" element={user ? <SchulenPage /> : <Navigate to="/" />} />
       <Route path="/admin/faecher" element={user ? <FaecherPage /> : <Navigate to="/" />} />
       <Route path="/admin/schulen-import" element={user ? <SchulenImportPage /> : <Navigate to="/" />} />
       <Route path="/admin/orte-import" element={user ? <OrteImportPage /> : <Navigate to="/" />} />
       <Route path="/lernen/multiple_choice/:testId" element={<MultipleChoicePage />} />
+      <Route path="/lernen/sprache/:testId" element={<SprachTestPage />} />  {/* NEU */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
