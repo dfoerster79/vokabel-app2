@@ -2,16 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
-// ─── Sprachcode je Fach (Whisper Format: 'fr', 'en', 'es', 'de') ─────────────
-const getFachLang = (fachName = '') => {
-  const n = fachName.toLowerCase();
-  if (n.includes('franz')) return 'fr';
-  if (n.includes('engl'))  return 'en';
-  if (n.includes('span'))  return 'es';
-  if (n.includes('lat'))   return null;
-  return 'de';
-};
-
 // ─── Normalisierung & Levenshtein ─────────────────────────────────────────────
 const normalize = (str = '') =>
   str.toLowerCase()
@@ -67,10 +57,13 @@ const SprachTestPage = () => {
   const [evaluating,      setEvaluating]      = useState(false);
 
   const [mode,            setMode]            = useState('speech');
-  const [recording,       setRecording]       = useState(false);
   const [micError,        setMicError]        = useState('');
+  
+  // Audio state
   const mediaRecorderRef  = useRef(null);
   const audioChunksRef    = useRef([]);
+  const [isRecording,     setIsRecording]     = useState(false);
+  const [micPermissionGranted, setMicPermissionGranted] = useState(false);
 
   // Speichert Erkennungen im Hintergrund: { [id]: { status, type, text, correct } }
   const [transcriptions,  setTranscriptions]  = useState({}); 
@@ -99,6 +92,23 @@ const SprachTestPage = () => {
     }
   }, [isFinished, evaluating, transcriptions, vocabList]);
 
+  // Wenn Mikrofon-Erlaubnis erteilt wurde und wir nicht in MC sind, starte automatisch Aufnahme
+  useEffect(() => {
+    if (micPermissionGranted && mode === 'speech' && !isFinished && vocabList.length > 0) {
+      startRecording();
+    }
+  }, [currentIndex, micPermissionGranted, mode, isFinished, vocabList]);
+
+  // Aufräumen, wenn Komponente unmountet
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
   const fetchData = async () => {
     setLoading(true);
     const { data: testData } = await supabase.from('vokabel_tests').select('fach_id, faecher(id, name)').eq('id', testId).single();
@@ -107,8 +117,10 @@ const SprachTestPage = () => {
     if (cFachId)   setFachId(cFachId);
     if (cFachName) setFachName(cFachName);
 
-    // Default MC für Latein oder wenn nicht unterstützt
-    if (!getFachLang(cFachName)) setMode('mc');
+    // Wenn es Latein ist, zwingen wir den Nutzer in den MC-Modus (da Spracheingabe für Latein meist nicht sinnvoll ist)
+    if (cFachName.toLowerCase().includes('lat')) {
+      setMode('mc');
+    }
 
     const { data: vocabData } = await supabase.from('vokabeln').select('*').eq('test_id', testId);
     if (!vocabData || vocabData.length === 0) { setLoading(false); return; }
@@ -159,27 +171,48 @@ const SprachTestPage = () => {
     setMcOptions([...unique, cur.uebersetzung].sort(() => Math.random() - 0.5));
   };
 
-  const startRecording = async () => {
+  // Erlaubnis explizit abfragen (nur beim ersten Mal)
+  const requestMicrophoneAccess = async () => {
     setMicError('');
     try {
+      // Nur einmal Permission holen
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Stream wird offen gehalten, damit das Device nicht jedes Mal neu initialisiert werden muss!
+      
+      // Wir initialisieren den MediaRecorder auf diesem persistenten Stream
       const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = e => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        stream.getTracks().forEach(track => track.stop());
-        processAudio(audioBlob, vocabList[currentIndex]);
-      };
       mediaRecorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
+      setMicPermissionGranted(true);
+      
     } catch (err) {
       console.error(err);
       setMicError('Mikrofon-Zugriff fehlgeschlagen. Bitte erlaube das Mikrofon im Browser.');
     }
+  };
+
+  const startRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    const recorder = mediaRecorderRef.current;
+    
+    // Wenn er noch aufnimmt, abbrechen (Sicherheitsnetz)
+    if (recorder.state === 'recording') {
+      recorder.stop();
+    }
+    
+    audioChunksRef.current = [];
+    
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    
+    recorder.onstop = () => {
+      // Beim Stop schicken wir das gesammelte Audio an Whisper
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      processAudio(audioBlob, vocabList[currentIndex]);
+    };
+    
+    recorder.start();
+    setIsRecording(true);
   };
 
   const processAudio = (blob, vocabItem) => {
@@ -191,15 +224,26 @@ const SprachTestPage = () => {
     reader.onloadend = async () => {
       try {
         const base64data = reader.result.split(',')[1];
+        
+        // Da das englische/französische Wort angezeigt wird und der Schüler AUF DEUTSCH antwortet,
+        // muss Whisper zwingend auf Deutsch ('de') lauschen! 
+        // Wir geben außerdem die gesuchte deutsche Übersetzung als Prompt mit, um die Erkennung massiv zu verbessern.
+        
         const res = await fetch('/api/transcribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audioBase64: base64data, language: getFachLang(fachName) })
+          body: JSON.stringify({ 
+            audioBase64: base64data, 
+            language: 'de', // ZWINGEND DEUTSCH, da der Schüler die deutsche Übersetzung spricht
+            prompt: vocabItem.uebersetzung // HILFT Whisper: Gib das erwartete deutsche Wort als Kontext!
+          })
         });
+        
         if (!res.ok) throw new Error('API Fehler bei Whisper');
         const data = await res.json();
         const heard = data.text || '';
         const correct = speechMatches(heard, vocabItem.uebersetzung);
+        
         setTranscriptions(prev => ({
           ...prev,
           [vocabId]: { status: 'done', type: 'speech', text: heard, correct }
@@ -215,10 +259,12 @@ const SprachTestPage = () => {
   };
 
   const handleWeiter = () => {
-    if (recording) {
-      mediaRecorderRef.current?.stop();
-      setRecording(false);
+    if (isRecording && mediaRecorderRef.current) {
+      // Das löst recorder.onstop aus -> processAudio wird für das *aktuelle* Wort aufgerufen
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
     } else {
+      // Falls der Nutzer ohne Aufnahme auf Weiter klickt
       setTranscriptions(prev => ({
         ...prev,
         [vocabList[currentIndex].id]: { status: 'done', type: 'speech', text: '[Nichts gesprochen]', correct: false }
@@ -242,6 +288,7 @@ const SprachTestPage = () => {
     if (next < vocabList.length) {
       setCurrentIndex(next);
       buildMcOptions(vocabList, next, wortartMap, fachVokabelPool);
+      // startRecording() wird automatisch durch useEffect aufgerufen, da sich currentIndex ändert!
     } else {
       setIsFinished(true);
       setEvaluating(true);
@@ -249,6 +296,11 @@ const SprachTestPage = () => {
   };
 
   const finishTest = () => {
+    // Wenn der Test fertig ist, schließe den Stream
+    if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    }
+
     let fScore = 0;
     let fFehler = [];
     vocabList.forEach(v => {
@@ -302,6 +354,9 @@ const SprachTestPage = () => {
 
   const abortTest = () => {
     if (window.confirm('Möchtest du den Test wirklich abbrechen? Der Fortschritt wird nicht gespeichert.')) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+      }
       navigate('/lernen');
     }
   };
@@ -376,7 +431,7 @@ const SprachTestPage = () => {
   const cur      = vocabList[currentIndex];
   const progress = (currentIndex / vocabList.length) * 100;
   const waId     = wortartMap[cur?.id];
-  const showMc   = mode === 'mc' || !getFachLang(fachName);
+  const showMc   = mode === 'mc' || (!fachName.toLowerCase().includes('lat') && false); // Temporär für die Logik angepasst.
 
   return (
     <div style={{ maxWidth: '42rem', margin: '2rem auto 5rem', padding: '0 1rem', fontFamily: 'sans-serif' }}>
@@ -410,27 +465,38 @@ const SprachTestPage = () => {
       {/* ── Modus: Spracheingabe ── */}
       {!showMc && (
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {!recording ? (
-            <button onClick={startRecording}
-              style={{ width: '100%', padding: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold', background: '#0f5156', color: 'white', border: 'none', borderRadius: '1rem', cursor: 'pointer' }}>
-              🎤 Aufnahme starten
+          
+          {/* Start-Button NUR anzeigen, wenn noch keine Rechte da sind */}
+          {!micPermissionGranted ? (
+            <button onClick={requestMicrophoneAccess}
+              style={{ width: '100%', padding: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold', background: '#0f5156', color: 'white', border: 'none', borderRadius: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '2rem' }}>🎤</span> Mikrofon aktivieren
             </button>
           ) : (
-            <button disabled
-              style={{ width: '100%', padding: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '1rem', cursor: 'not-allowed' }}>
-              🔴 Aufnahme läuft...
-            </button>
-          )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ width: '100%', padding: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                <div style={{ width: '16px', height: '16px', backgroundColor: '#dc2626', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+                Sprich jetzt...
+                <style>{`@keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }`}</style>
+              </div>
 
-          <button onClick={handleWeiter}
-            style={{ width: '100%', padding: '1rem', fontSize: '1.25rem', fontWeight: 'bold', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '1rem', cursor: 'pointer' }}>
-            Weiter ➞
-          </button>
+              <button onClick={handleWeiter}
+                style={{ width: '100%', padding: '1.5rem', fontSize: '1.5rem', fontWeight: 'bold', background: '#22c55e', color: 'white', border: 'none', borderRadius: '1rem', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(34, 197, 94, 0.4)' }}>
+                Nächstes Wort ➞
+              </button>
+            </div>
+          )}
 
           {micError && <p style={{ color: '#dc2626', fontSize: '0.875rem' }}>{micError}</p>}
           
           <div style={{ marginTop: '1rem' }}>
-            <button onClick={() => setMode('mc')}
+            <button onClick={() => {
+              setMode('mc');
+              // Mikrofon ausstellen, wenn man in den MC-Modus wechselt
+              if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+                mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+              }
+            }}
               style={{ background: 'none', border: '1px solid #d1d5db', color: '#6b7280', padding: '0.5rem 1.5rem', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.875rem' }}>
               📝 Lieber Auswahl zeigen
             </button>
@@ -441,10 +507,13 @@ const SprachTestPage = () => {
       {/* ── Modus: Multiple Choice (Fallback) ── */}
       {showMc && (
         <div>
-          {getFachLang(fachName) && (
+          {!fachName.toLowerCase().includes('lat') && (
             <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
               <span style={{ fontSize: '0.8rem', color: '#9ca3af', background: '#f3f4f6', padding: '3px 10px', borderRadius: '9999px' }}>📝 Auswahl-Modus</span>
-              <button onClick={() => setMode('speech')}
+              <button onClick={() => {
+                setMode('speech');
+                setMicPermissionGranted(false); // Rechte beim Zurückwechseln neu anfragen
+              }}
                 style={{ background: 'none', border: 'none', color: '#0f5156', fontSize: '0.875rem', cursor: 'pointer', marginLeft: 12 }}>
                 🎤 Zurück zu Sprache
               </button>
