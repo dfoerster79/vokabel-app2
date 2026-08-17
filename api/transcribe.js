@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { audioBase64, language } = req.body;
+    const { audioBase64, language, prompt } = req.body;
     if (!audioBase64) {
       return res.status(400).json({ error: 'Missing audio data' });
     }
@@ -30,6 +30,11 @@ export default async function handler(req, res) {
       const langCode = language.split('-')[0];
       body += `--${boundary}\r\n`;
       body += `Content-Disposition: form-data; name="language"\r\n\r\n${langCode}\r\n`;
+    }
+
+    if (prompt) {
+      body += `--${boundary}\r\n`;
+      body += `Content-Disposition: form-data; name="prompt"\r\n\r\n${prompt}\r\n`;
     }
     
     body += `--${boundary}\r\n`;
