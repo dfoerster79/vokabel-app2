@@ -30,18 +30,18 @@ const speechMatches = (heard, correct) => {
 
 const WORTART_LABELS = {
   noun:'Nomen', verb:'Verb', adjective:'Adjektiv', adverb:'Adverb',
-  pronoun:'Pronomen', preposition:'Pr\u00e4position', conjunction:'Konjunktion',
+  pronoun:'Pronomen', preposition:'Präposition', conjunction:'Konjunktion',
   determiner:'Artikel/Det.', numeral:'Zahlwort', interjection:'Interjektion',
   particle:'Partikel', phrase:'Wendung', other:'Sonstiges',
 };
 
 const statusLabel = (r) => {
-  if (!r) return '\u23f3 Wartet';
-  if (r.status === 'recording') return '\ud83d\udd34 Aufnahme...';
-  if (r.status === 'uploading') return '\u2b06\ufe0f Upload...';
-  if (r.status === 'processing') return '\ud83e\udd16 Whisper...';
-  if (r.status === 'done') return r.correct ? '\u2705 Richtig' : `\u274c Falsch ("${r.text || '\u2013'}")`;
-  return '\u23f3 Wartet';
+  if (!r) return '⏳ Wartet';
+  if (r.status === 'recording') return '🔴 Aufnahme...';
+  if (r.status === 'uploading') return '⬆️ Upload...';
+  if (r.status === 'processing') return '🤖 Whisper...';
+  if (r.status === 'done') return r.correct ? '✅ Richtig' : `❌ Falsch ("${r.text || '–'}")`;
+  return '⏳ Wartet';
 };
 
 const statusColor = (r) => {
@@ -81,20 +81,23 @@ const SprachTestPage = () => {
   const [elapsed, setElapsed] = useState(0);
   const [timeStats, setTimeStats] = useState({ total: 0, average: 0 });
   const [showDebug, setShowDebug] = useState(false);
+  // liveText: Aktuell laufende Whisper-Erkennung (für Live-Anzeige im Test-Screen)
+  const [liveText, setLiveText] = useState('');
 
   // Refs
-  // streamRef: der eine MediaStream f\u00fcrs Mikrofon \u2013 wird NUR EINMAL angefragt
+  // streamRef: der EINE MediaStream – wird NUR EINMAL beim Teststart angefragt
   const streamRef = useRef(null);
   // recorderRef: ein NEUER MediaRecorder je Vokabel
   const recorderRef = useRef(null);
-  // transcriptionsRef: spiegelt transcriptions-State f\u00fcr stale-closure-freien Zugriff
+  // transcriptionsRef: spiegelt transcriptions-State für stale-closure-freien Zugriff
   const transcriptionsRef = useRef({});
   const finishedRef = useRef(false);
   const vocabListRef = useRef([]);
   const startTimeRef = useRef(null);
 
   // ---------------------------------------------------------------------------
-  // Mikrofon: Stream einmal anfordern, dann wiederverwenden
+  // Mikrofon: Stream EINMAL anfordern (beim Klick auf "Mikrofon erlauben"),
+  // danach für alle Vokabeln wiederverwenden – KEIN erneutes getUserMedia
   // ---------------------------------------------------------------------------
   const requestMic = async () => {
     setMicError('');
@@ -108,39 +111,54 @@ const SprachTestPage = () => {
     }
   };
 
-  // Stream WIRKLICH stoppen (Browser-Icon erlischt)
+  // Stream WIRKLICH stoppen → Browser-Mikrofon-Icon erlischt garantiert
   const stopStream = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+      streamRef.current.getTracks().forEach(t => {
+        try { t.stop(); } catch (_) {}
+      });
       streamRef.current = null;
     }
     setIsRecording(false);
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Aufnahme: neuer MediaRecorder je Vokabel
-  // Gibt ein Promise<Blob> zur\u00fcck \u2013 kein globaler State, kein Ref-Timing-Bug
+  // Aufnahme: neuer MediaRecorder auf dem SELBEN Stream je Vokabel.
+  // Gibt ein Promise<Blob> zurück.
+  // WICHTIG: stopStream() wird HIER NICHT aufgerufen – nur in finishTest().
   // ---------------------------------------------------------------------------
   const recordVocab = (vocabItem) => new Promise((resolve) => {
     const stream = streamRef.current;
     if (!stream) { resolve(null); return; }
 
+    // Sicherstellen dass kein alter Recorder noch läuft
+    if (recorderRef.current && recorderRef.current.state === 'recording') {
+      recorderRef.current.stop();
+    }
+
     const chunks = [];
-    // Neuen Recorder auf dem bestehenden Stream erstellen
-    const recorder = new MediaRecorder(stream);
+    let mimeType = '';
+    // Robuste MIME-Type-Auswahl
+    const mimes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+    for (const m of mimes) {
+      if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+    }
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
     recorderRef.current = recorder;
 
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = () => {
       recorderRef.current = null;
-      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
       resolve(blob.size > 0 ? blob : null);
     };
 
-    // Status: Aufnahme l\u00e4uft
     updateTranscription(vocabItem.id, { status: 'recording', text: '', correct: false });
     recorder.start();
     setIsRecording(true);
+    setLiveText('');
   });
 
   // ---------------------------------------------------------------------------
@@ -185,24 +203,26 @@ const SprachTestPage = () => {
   };
 
   // ---------------------------------------------------------------------------
-  // Weiter-Button: Aufnahme stoppen und Whisper async starten
+  // Weiter-Button: Aufnahme stoppen → Blob → Whisper async
   // ---------------------------------------------------------------------------
   const handleWeiter = () => {
     const vocab = vocabListRef.current[currentIndex];
     if (!vocab) return;
 
     const recorder = recorderRef.current;
+    const isLast = currentIndex === vocabListRef.current.length - 1;
+
     if (recorder && recorder.state === 'recording') {
-      // onstop-Promise aus recordVocab l\u00e4uft weiter \u2013 wir starten Whisper danach
-      // Das geschieht \u00fcber den useEffect-Watcher unten ("Aufnahme beendet -> Whisper")
+      // onstop wird gefeuert → recordVocab-Promise resolved → useEffect startet Whisper
       recorder.stop();
       setIsRecording(false);
     } else if (!transcriptionsRef.current[vocab.id]) {
       updateTranscription(vocab.id, { status: 'done', text: '[Nichts gesprochen]', correct: false });
     }
 
-    const isLast = currentIndex === vocabListRef.current.length - 1;
     if (isLast) {
+      // Stream NOCH NICHT stoppen – letzte Aufnahme muss erst fertig verarbeitet werden
+      // stopStream() wird in finishTest() aufgerufen
       setPhase('evaluating');
     } else {
       setCurrentIndex(i => i + 1);
@@ -242,15 +262,17 @@ const SprachTestPage = () => {
     return () => clearInterval(id);
   }, [startTime, phase]);
 
-  // Neue Aufnahme starten wenn Index wechselt (oder Mikrofon freigegeben wird)
+  // ---------------------------------------------------------------------------
+  // Kernlogik: Neue Aufnahme starten wenn Index wechselt
+  // WICHTIG: Kein getUserMedia hier – Stream existiert bereits (streamRef)
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (mode !== 'speech' || !micReady || phase !== 'test' || !vocabList.length) return;
     const vocab = vocabList[currentIndex];
     if (!vocab) return;
-    // Noch keine Aufnahme f\u00fcr diese Vokabel?
+    // Bereits eine Aufnahme/Transkription für diese Vokabel? Nicht nochmal starten.
     if (transcriptionsRef.current[vocab.id]) return;
 
-    // Aufnahme starten, Blob abwarten, dann Whisper
     let cancelled = false;
     recordVocab(vocab).then(blob => {
       if (cancelled) return;
@@ -258,26 +280,32 @@ const SprachTestPage = () => {
         updateTranscription(vocab.id, { status: 'done', text: '[Keine Aufnahme]', correct: false });
         return;
       }
-      transcribeBlob(blob, vocab);
+      // Whisper async starten → im Hintergrund
+      transcribeBlob(blob, vocab).then(result => {
+        if (result) setLiveText(result.text);
+      });
     });
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, micReady, mode, phase, vocabList]);
 
-  // Evaluierungs-Phase: warten bis alle done
+  // ---------------------------------------------------------------------------
+  // Evaluierungs-Phase: Polling bis alle Transkriptionen done sind
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (phase !== 'evaluating' || !vocabList.length) return;
     const checkDone = () => {
       const all = vocabListRef.current;
-      const allDone = all.every(v => transcriptionsRef.current[v.id]?.status === 'done');
-      if (allDone) finishTest();
+      // Vokabeln die noch laufen oder gar keine Transkription haben
+      const pending = all.filter(v => {
+        const t = transcriptionsRef.current[v.id];
+        return !t || t.status !== 'done';
+      });
+      if (pending.length === 0) finishTest();
     };
-    // sofort pr\u00fcfen (evtl. schon alle fertig)
     checkDone();
-    // und bei jedem transcriptions-Update
-    // (transcriptionsRef wird synchron aktualisiert, daher Interval-Polling als Fallback)
-    const id = setInterval(checkDone, 200);
+    const id = setInterval(checkDone, 300);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, vocabList.length]);
@@ -289,13 +317,18 @@ const SprachTestPage = () => {
   }, [stopStream]);
 
   // ---------------------------------------------------------------------------
-  // Test abschlie\u00dfen
+  // Test abschließen – Mikrofon wird HIER gestoppt (nicht früher)
   // ---------------------------------------------------------------------------
   const finishTest = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
+
+    // Recorder stoppen falls noch aktiv
+    if (recorderRef.current?.state === 'recording') {
+      recorderRef.current.stop();
+    }
+    // Stream JETZT stoppen → Browser-Mic-Icon erlischt
     stopStream();
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
 
     const all = vocabListRef.current;
     const results = transcriptionsRef.current;
@@ -422,16 +455,16 @@ const SprachTestPage = () => {
     return (
       <div style={{maxWidth:'34rem',margin:'4rem auto',padding:'2rem',background:'white',borderRadius:'1rem',textAlign:'center',fontFamily:'sans-serif',boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}}>
         <h2 style={{fontSize:'1.6rem',color:'#0f5156',margin:'0 0 1rem'}}>🧠 KI wertet Antworten aus...</h2>
-        <p style={{color:'#6b7280',margin:'0 0 1rem'}}>Fertig: {done} / {vocabList.length} &middot; Noch offen: {vocabList.length - done}</p>
+        <p style={{color:'#6b7280',margin:'0 0 1rem'}}>Fertig: {done} / {vocabList.length} · Noch offen: {vocabList.length - done}</p>
         <div style={{background: active ? '#f0fdfa' : '#f3f4f6',borderRadius:'0.75rem',padding:'1rem',marginBottom:'1rem',textAlign:'left'}}>
           <div style={{fontSize:'0.75rem',color:'#0f766e',fontWeight:'bold',textTransform:'uppercase',letterSpacing:1}}>Aktuelle Bearbeitung</div>
           <div style={{fontSize:'1.1rem',color:'#134e4a',fontWeight:'bold',marginTop:4}}>
             {active
-              ? `${active.result?.status==='uploading'?'\u2b06\ufe0f':active.result?.status==='recording'?'\ud83d\udd34':'\ud83e\udd16'} ${active.vocab.original}`
-              : '\u2705 Alle Aufnahmen verarbeitet'}
+              ? `${active.result?.status==='uploading'?'⬆️':active.result?.status==='recording'?'🔴':'🤖'} ${active.vocab.original}`
+              : '✅ Alle Aufnahmen verarbeitet'}
           </div>
           {active && <div style={{color:'#0f766e',fontSize:'0.85rem',marginTop:4}}>
-            {active.result.status==='recording' ? 'Letzte Aufnahme l\u00e4uft noch...' : active.result.status==='uploading' ? 'Audio wird hochgeladen...' : 'Whisper erkennt die Antwort...'}
+            {active.result.status==='recording' ? 'Letzte Aufnahme läuft noch...' : active.result.status==='uploading' ? 'Audio wird hochgeladen...' : 'Whisper erkennt die Antwort...'}
           </div>}
         </div>
         <div style={{maxHeight:300,overflowY:'auto',textAlign:'left',borderTop:'1px solid #e5e7eb',paddingTop:'0.75rem'}}>
@@ -449,7 +482,7 @@ const SprachTestPage = () => {
   // RESULTS SCREEN
   if (phase === 'results') return (
     <div style={{maxWidth:'32rem',margin:'4rem auto',padding:'2rem',background:'white',borderRadius:'1rem',boxShadow:'0 20px 25px -5px rgba(0,0,0,0.1)',textAlign:'center',borderTop:'8px solid #0f5156',fontFamily:'sans-serif'}}>
-      <h2 style={{fontSize:'2rem',marginBottom:'1rem'}}>Test beendet! \ud83c\udf89</h2>
+      <h2 style={{fontSize:'2rem',marginBottom:'1rem'}}>Test beendet! 🎉</h2>
       <div style={{background:'#f0fdfa',padding:'1.5rem',borderRadius:'1rem',marginBottom:'1.5rem'}}>
         <p style={{fontSize:'1.25rem',margin:'0 0 0.5rem',color:'#4b5563'}}>Dein Ergebnis:</p>
         <p style={{fontSize:'3rem',fontWeight:'bold',color:'#0f5156',margin:0}}>
@@ -474,12 +507,12 @@ const SprachTestPage = () => {
           <p style={{margin:'0.25rem 0 0',fontSize:'1.25rem',fontWeight:'bold'}}>{timeStats.total} s</p>
         </div>
         <div style={{flex:1,background:'#f3f4f6',padding:'1rem',borderRadius:'0.75rem'}}>
-          <p style={{margin:0,color:'#6b7280',fontSize:'0.875rem'}}>&Oslash; pro Wort</p>
+          <p style={{margin:0,color:'#6b7280',fontSize:'0.875rem'}}>Ø pro Wort</p>
           <p style={{margin:'0.25rem 0 0',fontSize:'1.25rem',fontWeight:'bold'}}>{timeStats.average} s</p>
         </div>
       </div>
       <button onClick={() => navigate('/lernen')} style={{width:'100%',background:'#0f5156',color:'white',fontSize:'1.25rem',fontWeight:'bold',padding:'1rem',borderRadius:'0.75rem',border:'none',cursor:'pointer'}}>
-        Zur\u00fcck zur \u00dcbersicht
+        Zurück zur Übersicht
       </button>
     </div>
   );
@@ -491,6 +524,9 @@ const SprachTestPage = () => {
   const showMc = mode === 'mc' || fachName.toLowerCase().includes('lat');
   const activeTxCount = vocabList.filter(v => transcriptions[v.id] && transcriptions[v.id].status !== 'done').length;
   const doneTxCount = vocabList.filter(v => transcriptions[v.id]?.status === 'done').length;
+  // Status der aktuellen Vokabel (für Live-Feedback)
+  const currentTx = transcriptions[current?.id];
+  const currentStatus = currentTx?.status;
 
   return (
     <div style={{maxWidth:'42rem',margin:'2rem auto 5rem',padding:'0 1rem',fontFamily:'sans-serif'}}>
@@ -501,17 +537,17 @@ const SprachTestPage = () => {
           Frage {currentIndex+1} <span style={{fontSize:'0.875rem',fontWeight:'normal'}}>von {vocabList.length}</span>
         </span>
         <div style={{display:'flex',gap:'0.75rem',alignItems:'center'}}>
-          <span style={{fontSize:'0.875rem',color:'#6b7280'}}>&nbsp;\u23f1 {fmt(elapsed)}</span>
+          <span style={{fontSize:'0.875rem',color:'#6b7280'}}>&nbsp;⏱ {fmt(elapsed)}</span>
           <button onClick={() => setShowDebug(v => !v)}
             style={{background: activeTxCount>0 ? '#fef3c7' : '#f3f4f6', border:'1px solid #e5e7eb',
               color: activeTxCount>0 ? '#d97706' : '#6b7280', padding:'0.25rem 0.6rem',
               borderRadius:'9999px', cursor:'pointer', fontSize:'0.8rem'}}>
-            \ud83e\udd16 {doneTxCount}/{currentIndex+1}
+            🤖 {doneTxCount}/{currentIndex+1}
           </button>
           <button onClick={abortTest}
             style={{background:'none',border:'1px solid #e5e7eb',color:'#9ca3af',
               padding:'0.25rem 0.6rem',borderRadius:'0.5rem',cursor:'pointer',fontSize:'0.8rem'}}>
-            \u2715 Abbruch
+            ✕ Abbruch
           </button>
         </div>
       </div>
@@ -521,7 +557,7 @@ const SprachTestPage = () => {
         <div style={{background:'#1e293b',color:'#94a3b8',borderRadius:'0.75rem',padding:'1rem',
           marginBottom:'1rem',fontSize:'0.78rem',fontFamily:'monospace',maxHeight:220,overflowY:'auto'}}>
           <div style={{color:'#38bdf8',fontWeight:'bold',marginBottom:'0.5rem'}}>
-            \ud83d\udd0d KI-Debug ({doneTxCount}/{vocabList.length} fertig)
+            🔍 KI-Debug ({doneTxCount}/{vocabList.length} fertig)
           </div>
           {vocabList.slice(0, currentIndex+1).map(v => (
             <div key={v.id} style={{display:'flex',gap:8,padding:'2px 0',borderBottom:'1px solid #334155'}}>
@@ -570,11 +606,11 @@ const SprachTestPage = () => {
         </div>
       )}
 
-      {/* Mikrofon-Anfrage */}
+      {/* Mikrofon-Anfrage (nur einmalig, danach nie mehr) */}
       {mode === 'speech' && !micReady && (
         <div style={{textAlign:'center',padding:'2rem',background:'#f0fdfa',borderRadius:'1rem',marginBottom:'1rem'}}>
-          <div style={{fontSize:'3rem',marginBottom:'0.75rem'}}>🎙\ufe0f</div>
-          <p style={{color:'#4b5563',marginBottom:'1rem'}}>Bitte erlaube den Mikrofon-Zugriff f\u00fcr den Sprachtest.</p>
+          <div style={{fontSize:'3rem',marginBottom:'0.75rem'}}>🎙️</div>
+          <p style={{color:'#4b5563',marginBottom:'1rem'}}>Bitte erlaube den Mikrofon-Zugriff für den Sprachtest.<br/><small style={{color:'#9ca3af'}}>Das Mikrofon bleibt für alle Fragen geöffnet.</small></p>
           {micError && <p style={{color:'#dc2626',marginBottom:'1rem',fontSize:'0.875rem'}}>{micError}</p>}
           <button onClick={requestMic}
             style={{background:'#0f5156',color:'white',padding:'0.75rem 2rem',
@@ -584,20 +620,27 @@ const SprachTestPage = () => {
         </div>
       )}
 
-      {/* Aufnahme-Indikator */}
+      {/* Aufnahme-Indikator + Live-Status */}
       {mode === 'speech' && micReady && (
         <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
           <div style={{
             display:'inline-flex',alignItems:'center',gap:'0.5rem',
-            background: isRecording ? '#fef2f2' : '#f3f4f6',
-            color: isRecording ? '#dc2626' : '#6b7280',
+            background: isRecording ? '#fef2f2' : (currentStatus === 'processing' ? '#eff6ff' : (currentStatus === 'done' ? (currentTx?.correct ? '#f0fdf4' : '#fef2f2') : '#f3f4f6')),
+            color: isRecording ? '#dc2626' : (currentStatus === 'processing' ? '#2563eb' : (currentStatus === 'done' ? (currentTx?.correct ? '#15803d' : '#b91c1c') : '#6b7280')),
             padding:'0.5rem 1.25rem',borderRadius:'9999px',fontSize:'0.9rem',
-            border:`1px solid ${isRecording ? '#fecaca' : '#e5e7eb'}`,
+            border:`1px solid ${isRecording ? '#fecaca' : (currentStatus === 'processing' ? '#bfdbfe' : '#e5e7eb')}`,
+            transition:'all 0.3s ease',
           }}>
             <span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',
-              background: isRecording ? '#dc2626' : '#d1d5db',
-              animation: isRecording ? 'pulse 1.5s infinite' : 'none'}} />
-            {isRecording ? 'Aufnahme l\u00e4uft...' : 'Bereit'}
+              background: isRecording ? '#dc2626' : (currentStatus === 'processing' ? '#2563eb' : '#d1d5db'),
+              animation: (isRecording || currentStatus === 'processing') ? 'pulse 1.5s infinite' : 'none'}} />
+            {isRecording
+              ? 'Aufnahme läuft... Sprich jetzt!'
+              : currentStatus === 'uploading' ? '⬆️ Audio wird gesendet...'
+              : currentStatus === 'processing' ? '🤖 Whisper erkennt...'
+              : currentStatus === 'done'
+                ? (currentTx?.correct ? `✅ Erkannt: "${currentTx.text}"` : `❌ Gehört: "${currentTx?.text || '–'}"`)
+              : 'Bereit'}
           </div>
         </div>
       )}
@@ -622,7 +665,7 @@ const SprachTestPage = () => {
         <button onClick={handleWeiter}
           style={{width:'100%',background:'#0f5156',color:'white',fontSize:'1.25rem',
             fontWeight:700,padding:'1rem',borderRadius:'0.75rem',border:'none',cursor:'pointer'}}>
-          {currentIndex === vocabList.length-1 ? 'Test beenden \u2713' : 'Weiter \u2192'}
+          {currentIndex === vocabList.length-1 ? 'Test beenden ✓' : 'Weiter →'}
         </button>
       )}
 
