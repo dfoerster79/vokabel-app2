@@ -82,7 +82,7 @@ const SprachTestPage = () => {
   const [timeStats, setTimeStats] = useState({ total: 0, average: 0 });
   const [showDebug, setShowDebug] = useState(false);
 
-  // Refs für exakte synchrone Steuerung ohne Timing-Bugs
+  // Refs für synchrone Steuerung ohne Timing-Probleme
   const streamRef = useRef(null);
   const currentRecorderRef = useRef(null);
   const currentChunksRef = useRef([]);
@@ -139,7 +139,7 @@ const SprachTestPage = () => {
     currentVocabRef.current = vocab;
 
     let mimeType = '';
-    const mimes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+    const mimes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
     for (const m of mimes) {
       if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
     }
@@ -157,7 +157,8 @@ const SprachTestPage = () => {
 
       currentRecorderRef.current = recorder;
       updateTranscription(vocab.id, { status: 'recording', text: '', correct: false });
-      recorder.start(100); // 100ms Häppchen für saubere Pufferung
+      // WICHTIG: start() OHNE timeslice aufrufen! Nur so erzeugt iOS Safari eine vollständige, gültige MP4-Datei mit Header beim stop()
+      recorder.start();
       setIsRecording(true);
     } catch (err) {
       console.error('MediaRecorder start error:', err);
@@ -207,6 +208,7 @@ const SprachTestPage = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               audioBase64: String(reader.result).split(',')[1],
+              mimeType: blob.type || 'audio/webm',
               language: 'de',
               prompt: vocabItem.uebersetzung,
             }),
@@ -255,7 +257,7 @@ const SprachTestPage = () => {
       if (nextVocab && mode === 'speech' && micReady) {
         setTimeout(() => {
           startRecording(nextVocab);
-        }, 60);
+        }, 80);
       }
     }
   };
