@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { audioBase64, language = 'de', prompt = '', mimeType = '' } = req.body;
+    const { audioBase64, language = 'de', mimeType = '' } = req.body;
 
     if (!audioBase64) {
       return res.status(400).json({ error: 'Keine Audio-Daten empfangen' });
@@ -48,11 +48,12 @@ export default async function handler(req, res) {
 
     const file = await toFile(buffer, filename, { type: detectedType });
 
+    // Die erwartete Antwort wird bewusst nicht als Prompt übergeben.
+    // Dadurch wird Whisper nicht in Richtung der Lösung vorgeprägt.
     const response = await openai.audio.transcriptions.create({
       file,
       model: 'whisper-1',
       language,
-      prompt: prompt ? `Die Antwort ist wahrscheinlich: ${prompt}` : undefined,
     });
 
     return res.status(200).json({ text: response.text || '' });
