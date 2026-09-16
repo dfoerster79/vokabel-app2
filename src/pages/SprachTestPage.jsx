@@ -11,12 +11,57 @@ const normalize = (str = '') => str
   .trim()
   .replace(/\s+/g, ' ');
 
-// Bei einzelnen Vokabeln keine Teilstring- oder Levenshtein-Treffer:
-// Whisper muss das normalisierte Zielwort vollständig erkennen.
 const speechMatches = (heard, correct) => {
   const h = normalize(heard);
   const c = normalize(correct);
   return Boolean(h && c && h === c);
+};
+
+const audioBlobToWav = async (blob) => {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass || !window.OfflineAudioContext) {
+    throw new Error('Dieser Browser unterstützt keine Audio-Konvertierung für Azure.');
+  }
+
+  const audioContext = new AudioContextClass();
+  try {
+    const decoded = await audioContext.decodeAudioData(await blob.arrayBuffer());
+    const sampleRate = 16000;
+    const frameCount = Math.max(1, Math.ceil(decoded.duration * sampleRate));
+    const offlineContext = new OfflineAudioContext(1, frameCount, sampleRate);
+    const source = offlineContext.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offlineContext.destination);
+    source.start(0);
+    const rendered = await offlineContext.startRendering();
+    const samples = rendered.getChannelData(0);
+    const wav = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(wav);
+
+    const writeString = (offset, value) => {
+      for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+    };
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i += 1) {
+      const sample = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    }
+    return new Blob([wav], { type: 'audio/wav' });
+  } finally {
+    if (audioContext.close) await audioContext.close().catch(() => {});
+  }
 };
 
 const WORTART_LABELS = {
@@ -30,10 +75,15 @@ const statusLabel = (result) => {
   if (!result) return '⏳ Wartet';
   if (result.status === 'recording') return '🔴 Aufnahme...';
   if (result.status === 'uploading') return '⬆️ Upload...';
-  if (result.status === 'processing') return '🤖 Whisper...';
-  if (result.status === 'done') return result.correct
-    ? '✅ Richtig'
-    : `❌ Falsch ("${result.text || '–'}")`;
+  if (result.status === 'processing') return '🤖 Azure bewertet...';
+  if (result.status === 'done') {
+    const score = Number.isFinite(result.pronunciationScore)
+      ? ` (${Math.round(result.pronunciationScore)}/100)`
+      : '';
+    return result.correct
+      ? `✅ Richtig${score}`
+      : `❌ Falsch${score} ("${result.text || '–'}")`;
+  }
   return '⏳ Wartet';
 };
 
@@ -104,26 +154,50 @@ const SprachTestPage = () => {
   const transcribeBlob = useCallback(async (blob, vocabItem) => {
     updateTranscription(vocabItem.id, { status: 'uploading' });
     try {
+      const wavBlob = await audioBlobToWav(blob);
       const audioBase64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(String(reader.result).split(',')[1] || '');
         reader.onerror = reject;
-        reader.readAsDataURL(blob);
+        reader.readAsDataURL(wavBlob);
       });
       updateTranscription(vocabItem.id, { status: 'processing' });
-      const response = await fetch('/api/transcribe', {
+      const response = await fetch('/api/pronunciation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioBase64, mimeType: blob.type || 'audio/webm', language: 'de' }),
+        body: JSON.stringify({
+          audioBase64,
+          referenceText: vocabItem.uebersetzung,
+          language: 'de-DE',
+        }),
       });
-      if (!response.ok) throw new Error(`Whisper ${response.status}: ${await response.text()}`);
-      const { text = '' } = await response.json();
-      const correct = speechMatches(text, vocabItem.uebersetzung);
-      updateTranscription(vocabItem.id, { status: 'done', text, correct });
-      return { text, correct };
+      if (!response.ok) throw new Error(`Azure ${response.status}: ${await response.text()}`);
+      const result = await response.json();
+      const pronunciationScore = Number.isFinite(Number(result.pronunciationScore))
+        ? Number(result.pronunciationScore)
+        : null;
+      const correct = speechMatches(result.text, vocabItem.uebersetzung)
+        && pronunciationScore !== null
+        && pronunciationScore >= 60;
+      updateTranscription(vocabItem.id, {
+        status: 'done',
+        text: result.text || '',
+        correct,
+        pronunciationScore,
+        accuracyScore: result.accuracyScore ?? null,
+        fluencyScore: result.fluencyScore ?? null,
+        completenessScore: result.completenessScore ?? null,
+        provider: 'azure',
+      });
+      return { text: result.text || '', correct };
     } catch (error) {
-      console.error('Whisper error:', error);
-      updateTranscription(vocabItem.id, { status: 'done', text: `[Fehler: ${error.message}]`, correct: false });
+      console.error('Azure pronunciation assessment error:', error);
+      updateTranscription(vocabItem.id, {
+        status: 'done',
+        text: `[Fehler: ${error.message}]`,
+        correct: false,
+        provider: 'azure',
+      });
       return { text: '', correct: false };
     }
   }, [updateTranscription]);
