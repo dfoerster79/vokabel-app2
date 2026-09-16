@@ -48,8 +48,10 @@ export default async function handler(req, res) {
 
     const file = await toFile(buffer, filename, { type: detectedType });
 
-    // Die erwartete Antwort wird bewusst nicht als Prompt übergeben.
-    // Dadurch wird Whisper nicht in Richtung der Lösung vorgeprägt.
+    // Deutsch ist für den aktuellen Sprachtest korrekt: Das angezeigte Wort
+    // ist Englisch, gesprochen wird die deutsche Übersetzung. Die erwartete
+    // Antwort wird absichtlich nicht als Prompt an Whisper übergeben, damit
+    // die Transkription nicht in Richtung der Lösung beeinflusst wird.
     const response = await openai.audio.transcriptions.create({
       file,
       model: 'whisper-1',
