@@ -11,13 +11,33 @@ const normalize = (str = '') => str
   .trim()
   .replace(/\s+/g, ' ');
 
-const speechMatches = (heard, correct) => {
-  const h = normalize(heard);
-  const c = normalize(correct);
-  return Boolean(h && c && h === c);
+// Zerlegt Felder wie "Anzeige; Werbespot", "Rücken, Rückseite",
+// "Schauspieler/-in" oder "(sich) festhalten an" in einzelne Antworten.
+const expandAnswers = (value = '') => {
+  const variants = String(value)
+    .split(/[;,]/)
+    .flatMap(part => {
+      const p = part.trim();
+      const match = p.match(/^(.+?)\/-(\p{L}+)$/u);
+      return match ? [match[1], match[1] + match[2]] : [p];
+    })
+    .flatMap(part => [
+      part,
+      part.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim(),
+    ])
+    .filter(Boolean);
+  return [...new Set(variants)];
 };
 
-const audioBlobToWav = async (blob) => {
+const findMatchingAnswer = (heard, correct) => {
+  const heardNormalized = normalize(heard);
+  if (!heardNormalized) return null;
+  return expandAnswers(correct).find(answer => normalize(answer) === heardNormalized) || null;
+};
+
+const speechMatches = (heard, correct) => Boolean(findMatchingAnswer(heard, correct));
+
+const audioBlobToWav = async blob => {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass || !window.OfflineAudioContext) {
     throw new Error('Dieser Browser unterstützt keine Audio-Konvertierung für Azure.');
@@ -71,7 +91,7 @@ const WORTART_LABELS = {
   particle: 'Partikel', phrase: 'Wendung', other: 'Sonstiges',
 };
 
-const statusLabel = (result) => {
+const statusLabel = result => {
   if (!result) return '⏳ Wartet';
   if (result.status === 'recording') return '🔴 Aufnahme...';
   if (result.status === 'uploading') return '⬆️ Upload...';
@@ -80,14 +100,12 @@ const statusLabel = (result) => {
     const score = Number.isFinite(result.pronunciationScore)
       ? ` (${Math.round(result.pronunciationScore)}/100)`
       : '';
-    return result.correct
-      ? `✅ Richtig${score}`
-      : `❌ Falsch${score} ("${result.text || '–'}")`;
+    return result.correct ? `✅ Richtig${score}` : `❌ Falsch${score} ("${result.text || '–'}")`;
   }
   return '⏳ Wartet';
 };
 
-const statusColor = (result) => {
+const statusColor = result => {
   if (!result) return '#9ca3af';
   if (result.status === 'recording') return '#dc2626';
   if (result.status === 'uploading') return '#d97706';
@@ -162,23 +180,24 @@ const SprachTestPage = () => {
         reader.readAsDataURL(wavBlob);
       });
       updateTranscription(vocabItem.id, { status: 'processing' });
+      const referenceText = (expandAnswers(vocabItem.uebersetzung)[0] || vocabItem.uebersetzung)
+        .replace(/[()]/g, '')
+        .trim();
       const response = await fetch('/api/pronunciation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audioBase64,
-          referenceText: vocabItem.uebersetzung,
-          language: 'de-DE',
-        }),
+        body: JSON.stringify({ audioBase64, referenceText, language: 'de-DE' }),
       });
       if (!response.ok) throw new Error(`Azure ${response.status}: ${await response.text()}`);
       const result = await response.json();
       const pronunciationScore = Number.isFinite(Number(result.pronunciationScore))
         ? Number(result.pronunciationScore)
         : null;
-      const correct = speechMatches(result.text, vocabItem.uebersetzung)
-        && pronunciationScore !== null
-        && pronunciationScore >= 60;
+      const matched = findMatchingAnswer(result.text, vocabItem.uebersetzung);
+      const scoreApplies = matched && normalize(matched) === normalize(referenceText);
+      const correct = Boolean(matched) && (
+        !scoreApplies || (pronunciationScore !== null && pronunciationScore >= 60)
+      );
       updateTranscription(vocabItem.id, {
         status: 'done',
         text: result.text || '',
@@ -202,7 +221,7 @@ const SprachTestPage = () => {
     }
   }, [updateTranscription]);
 
-  const startRecording = useCallback((vocab) => {
+  const startRecording = useCallback(vocab => {
     if (!streamRef.current || !vocab) return;
     if (currentRecorderRef.current && currentRecorderRef.current.state !== 'inactive') {
       try { currentRecorderRef.current.stop(); } catch (_) {}
@@ -214,7 +233,6 @@ const SprachTestPage = () => {
       const recorder = mimeType
         ? new MediaRecorder(streamRef.current, { mimeType })
         : new MediaRecorder(streamRef.current);
-
       recorder.__chunks = chunks;
       recorder.ondataavailable = event => {
         if (event.data && event.data.size > 0) chunks.push(event.data);
@@ -230,11 +248,10 @@ const SprachTestPage = () => {
     }
   }, [updateTranscription]);
 
-  const stopRecordingAndTranscribe = useCallback((vocab) => {
+  const stopRecordingAndTranscribe = useCallback(vocab => {
     const recorder = currentRecorderRef.current;
     const targetVocab = vocab || currentVocabRef.current;
     if (!targetVocab) return Promise.resolve();
-
     if (!recorder || recorder.state === 'inactive') {
       if (!transcriptionsRef.current[targetVocab.id]) {
         updateTranscription(targetVocab.id, { status: 'done', text: '[Keine Aufnahme]', correct: false });
@@ -249,9 +266,7 @@ const SprachTestPage = () => {
         else updateTranscription(targetVocab.id, { status: 'done', text: '[Keine Aufnahme]', correct: false });
         resolve();
       };
-      try {
-        recorder.stop();
-      } catch (_) {
+      try { recorder.stop(); } catch (_) {
         updateTranscription(targetVocab.id, { status: 'done', text: '[Aufnahme konnte nicht beendet werden]', correct: false });
         resolve();
       }
@@ -317,13 +332,11 @@ const SprachTestPage = () => {
     const { data: testData } = await supabase.from('vokabel_tests').select('fach_id, faecher(id, name)').eq('id', testId).single();
     const selectedFachId = testData?.fach_id || null;
     const selectedFachName = testData?.faecher?.name || '';
-    setFachId(selectedFachId);
-    setFachName(selectedFachName);
+    setFachId(selectedFachId); setFachName(selectedFachName);
     if (selectedFachName.toLowerCase().includes('lat')) setMode('mc');
 
     const { data: vocabData } = await supabase.from('vokabeln').select('*').eq('test_id', testId);
     if (!vocabData?.length) { setLoading(false); return; }
-
     const ids = vocabData.map(v => v.id);
     const { data: waData } = await supabase.from('vokabeln_wortarten').select('vokabel_id, wortart_id').in('vokabel_id', ids);
     const waMap = {};
@@ -343,13 +356,10 @@ const SprachTestPage = () => {
         pool = (poolData || []).map(v => ({ ...v, wortart_id: map[v.id] || 'other' }));
       }
     }
-
     const shuffled = [...vocabData].sort(() => Math.random() - 0.5);
-    setFachVokabelPool(pool);
-    setVocabList(shuffled);
+    setFachVokabelPool(pool); setVocabList(shuffled);
     buildMcOptions(shuffled, 0, waMap, pool);
-    setStartTime(Date.now());
-    setLoading(false);
+    setStartTime(Date.now()); setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [testId]);
@@ -361,28 +371,23 @@ const SprachTestPage = () => {
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
     return () => clearInterval(timer);
   }, [startTime, phase]);
-
   useEffect(() => {
     if (mode !== 'speech' || !micReady || phase !== 'test' || !vocabList.length) return;
     const current = vocabList[currentIndex];
     if (current && !currentRecorderRef.current && !transcriptionsRef.current[current.id]) startRecording(current);
   }, [micReady, phase, vocabList, currentIndex, mode, startRecording]);
-
   useEffect(() => {
     if (vocabList.length && currentIndex < vocabList.length) buildMcOptions(vocabList, currentIndex, wortartMap, fachVokabelPool);
   }, [currentIndex, vocabList, wortartMap, fachVokabelPool, buildMcOptions]);
-
   useEffect(() => {
     if (phase !== 'evaluating' || !vocabList.length) return undefined;
     const checkDone = () => {
-      const pending = vocabListRef.current.some(v => !transcriptionsRef.current[v.id] || transcriptionsRef.current[v.id].status !== 'done');
-      if (!pending) finishTest();
+      if (!vocabListRef.current.some(v => !transcriptionsRef.current[v.id] || transcriptionsRef.current[v.id].status !== 'done')) finishTest();
     };
     checkDone();
     const timer = setInterval(checkDone, 250);
     return () => clearInterval(timer);
   }, [phase, vocabList.length]);
-
   useEffect(() => () => {
     if (currentRecorderRef.current && currentRecorderRef.current.state !== 'inactive') {
       try { currentRecorderRef.current.stop(); } catch (_) {}
@@ -410,24 +415,19 @@ const SprachTestPage = () => {
 
   const finishTest = () => {
     if (finishedRef.current) return;
-    finishedRef.current = true;
-    stopStream();
-    const all = vocabListRef.current;
-    const results = transcriptionsRef.current;
+    finishedRef.current = true; stopStream();
+    const all = vocabListRef.current; const results = transcriptionsRef.current;
     const errors = all.filter(v => !results[v.id]?.correct);
     const finalScore = all.length - errors.length;
     const total = Math.max(1, (Date.now() - startTimeRef.current) / 1000);
-    setScore(finalScore);
-    setFehlerListe(errors);
+    setScore(finalScore); setFehlerListe(errors);
     setTimeStats({ total: total.toFixed(1), average: (total / all.length).toFixed(1) });
-    setPhase('results');
-    saveResults(finalScore, errors, total, total / all.length, results);
+    setPhase('results'); saveResults(finalScore, errors, total, total / all.length, results);
   };
 
   const abortTest = () => {
     if (window.confirm('Test wirklich abbrechen? Fortschritt wird nicht gespeichert.')) {
-      stopStream();
-      navigate('/lernen');
+      stopStream(); navigate('/lernen');
     }
   };
 
@@ -439,38 +439,17 @@ const SprachTestPage = () => {
     const entries = vocabList.map(v => ({ vocab: v, result: transcriptions[v.id] }));
     const done = entries.filter(entry => entry.result?.status === 'done').length;
     const active = entries.find(entry => ['uploading', 'processing', 'recording'].includes(entry.result?.status));
-    return <div style={{ maxWidth: '34rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
-      <h2 style={{ color: '#0f5156' }}>🧠 KI wertet Antworten aus...</h2>
-      <p style={{ color: '#6b7280' }}>Fertig: {done} / {vocabList.length}</p>
-      <p style={{ color: '#0f766e' }}>{active ? `${active.vocab.original}: ${statusLabel(active.result)}` : '✅ Alle Aufnahmen verarbeitet'}</p>
-      {entries.map(({ vocab, result }) => <div key={vocab.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.45rem 0' }}><span>{vocab.original}</span><span style={{ color: statusColor(result) }}>{statusLabel(result)}</span></div>)}
-    </div>;
+    return <div style={{ maxWidth: '34rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}><h2 style={{ color: '#0f5156' }}>🧠 KI wertet Antworten aus...</h2><p style={{ color: '#6b7280' }}>Fertig: {done} / {vocabList.length}</p><p style={{ color: '#0f766e' }}>{active ? `${active.vocab.original}: ${statusLabel(active.result)}` : '✅ Alle Aufnahmen verarbeitet'}</p>{entries.map(({ vocab, result }) => <div key={vocab.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.45rem 0' }}><span>{vocab.original}</span><span style={{ color: statusColor(result) }}>{statusLabel(result)}</span></div>)}</div>;
   }
 
-  if (phase === 'results') return <div style={{ maxWidth: '32rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
-    <h2>Test beendet! 🎉</h2>
-    <p style={{ fontSize: '3rem', fontWeight: 'bold', color: '#0f5156' }}>{score} / {vocabList.length}</p>
-    {fehlerListe.length > 0 && <div style={{ textAlign: 'left', background: '#fef2f2', padding: '1rem', borderRadius: '0.75rem' }}><h3 style={{ color: '#991b1b' }}>Deine Fehler:</h3>{fehlerListe.map(v => <div key={v.id} style={{ marginBottom: '0.8rem' }}><strong>{v.original}</strong><br /><span style={{ color: '#166534' }}>Richtig: {v.uebersetzung}</span><br /><span style={{ color: '#991b1b' }}>Du sagtest: {transcriptions[v.id]?.text || '[Nichts]'}</span></div>)}</div>}
-    <div style={{ display: 'flex', gap: '1rem', margin: '1.5rem 0' }}><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Gesamtzeit<br /><strong>{timeStats.total} s</strong></div><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Ø pro Wort<br /><strong>{timeStats.average} s</strong></div></div>
-    <button onClick={() => navigate('/lernen')} style={{ width: '100%', background: '#0f5156', color: 'white', padding: '1rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>Zurück zur Übersicht</button>
-  </div>;
+  if (phase === 'results') return <div style={{ maxWidth: '32rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}><h2>Test beendet! 🎉</h2><p style={{ fontSize: '3rem', fontWeight: 'bold', color: '#0f5156' }}>{score} / {vocabList.length}</p>{fehlerListe.length > 0 && <div style={{ textAlign: 'left', background: '#fef2f2', padding: '1rem', borderRadius: '0.75rem' }}><h3 style={{ color: '#991b1b' }}>Deine Fehler:</h3>{fehlerListe.map(v => <div key={v.id} style={{ marginBottom: '0.8rem' }}><strong>{v.original}</strong><br /><span style={{ color: '#166534' }}>Richtig: {v.uebersetzung}</span><br /><span style={{ color: '#991b1b' }}>Du sagtest: {transcriptions[v.id]?.text || '[Nichts]'}</span></div>)}</div>}<div style={{ display: 'flex', gap: '1rem', margin: '1.5rem 0' }}><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Gesamtzeit<br /><strong>{timeStats.total} s</strong></div><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Ø pro Wort<br /><strong>{timeStats.average} s</strong></div></div><button onClick={() => navigate('/lernen')} style={{ width: '100%', background: '#0f5156', color: 'white', padding: '1rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>Zurück zur Übersicht</button></div>;
 
   const current = vocabList[currentIndex];
   const progress = ((currentIndex + 1) / vocabList.length) * 100;
   const showMc = mode === 'mc' || fachName.toLowerCase().includes('lat');
   const doneTxCount = vocabList.filter(v => transcriptions[v.id]?.status === 'done').length;
 
-  return <div style={{ maxWidth: '42rem', margin: '2rem auto 5rem', padding: '0 1rem', fontFamily: 'sans-serif' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}><span>Frage {currentIndex + 1} von {vocabList.length}</span><div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}><span>⏱ {fmt(elapsed)}</span><button onClick={() => setShowDebug(value => !value)} style={{ border: '1px solid #e5e7eb', borderRadius: '9999px', padding: '0.25rem 0.6rem', cursor: 'pointer' }}>🤖 {doneTxCount}/{currentIndex + 1}</button><button onClick={abortTest} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.25rem 0.6rem', cursor: 'pointer' }}>✕ Abbruch</button></div></div>
-    {showDebug && <div style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem', fontSize: '0.8rem', fontFamily: 'monospace' }}>{vocabList.slice(0, currentIndex + 1).map(v => <div key={v.id}>{v.original}: <span style={{ color: statusColor(transcriptions[v.id]) }}>{statusLabel(transcriptions[v.id])}</span></div>)}</div>}
-    <div style={{ height: 6, background: '#e5e7eb', borderRadius: 99, marginBottom: '1.5rem', overflow: 'hidden' }}><div style={{ height: '100%', width: `${progress}%`, background: '#0f5156', borderRadius: 99 }} /></div>
-    {fachName && <div style={{ display: 'inline-block', background: '#f0fdfa', color: '#0f766e', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', marginBottom: '1rem' }}>{fachName}</div>}
-    <div style={{ background: 'white', borderRadius: '1.25rem', padding: '2.5rem 2rem', textAlign: 'center', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>{wortartMap[current.id] && <div style={{ color: '#6b7280', marginBottom: '1rem' }}>{WORTART_LABELS[wortartMap[current.id]] || wortartMap[current.id]}</div>}<div style={{ fontSize: '2.5rem', fontWeight: 700 }}>{current.original}</div>{current.beispiel && <div style={{ marginTop: '1rem', color: '#6b7280', fontStyle: 'italic' }}>{current.beispiel}</div>}</div>
-    {mode === 'speech' && !micReady && <div style={{ textAlign: 'center', padding: '2rem', background: '#f0fdfa', borderRadius: '1rem', marginBottom: '1rem' }}><div style={{ fontSize: '3rem' }}>🎙️</div><p>Bitte erlaube den Mikrofon-Zugriff für den Sprachtest.</p>{micError && <p style={{ color: '#dc2626' }}>{micError}</p>}<button onClick={requestMic} style={{ background: '#0f5156', color: 'white', padding: '0.75rem 2rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>Mikrofon erlauben</button></div>}
-    {mode === 'speech' && micReady && <div style={{ textAlign: 'center', marginBottom: '1.5rem', color: isRecording ? '#dc2626' : '#6b7280' }}>{isRecording ? '🔴 Aufnahme läuft... Sprich jetzt!' : 'Bereit'}</div>}
-    {showMc && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem' }}>{mcOptions.map(option => <button key={option} onClick={() => handleMcAnswer(option)} style={{ background: 'white', border: '2px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.85rem', cursor: 'pointer' }}>{option}</button>)}</div>}
-    {!showMc && micReady && <button onClick={handleWeiter} style={{ width: '100%', background: '#0f5156', color: 'white', fontSize: '1.25rem', fontWeight: 700, padding: '1rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>{currentIndex === vocabList.length - 1 ? 'Test beenden ✓' : 'Weiter →'}</button>}
-  </div>;
+  return <div style={{ maxWidth: '42rem', margin: '2rem auto 5rem', padding: '0 1rem', fontFamily: 'sans-serif' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}><span>Frage {currentIndex + 1} von {vocabList.length}</span><div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}><span>⏱ {fmt(elapsed)}</span><button onClick={() => setShowDebug(value => !value)} style={{ border: '1px solid #e5e7eb', borderRadius: '9999px', padding: '0.25rem 0.6rem', cursor: 'pointer' }}>🤖 {doneTxCount}/{currentIndex + 1}</button><button onClick={abortTest} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.25rem 0.6rem', cursor: 'pointer' }}>✕ Abbruch</button></div></div>{showDebug && <div style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem', fontSize: '0.8rem', fontFamily: 'monospace' }}>{vocabList.slice(0, currentIndex + 1).map(v => <div key={v.id}>{v.original}: <span style={{ color: statusColor(transcriptions[v.id]) }}>{statusLabel(transcriptions[v.id])}</span></div>)}</div>}<div style={{ height: 6, background: '#e5e7eb', borderRadius: 99, marginBottom: '1.5rem', overflow: 'hidden' }}><div style={{ height: '100%', width: `${progress}%`, background: '#0f5156', borderRadius: 99 }} /></div>{fachName && <div style={{ display: 'inline-block', background: '#f0fdfa', color: '#0f766e', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem', marginBottom: '1rem' }}>{fachName}</div>}<div style={{ background: 'white', borderRadius: '1.25rem', padding: '2.5rem 2rem', textAlign: 'center', marginBottom: '1.5rem', border: '1px solid #e5e7eb' }}>{wortartMap[current.id] && <div style={{ color: '#6b7280', marginBottom: '1rem' }}>{WORTART_LABELS[wortartMap[current.id]] || wortartMap[current.id]}</div>}<div style={{ fontSize: '2.5rem', fontWeight: 700 }}>{current.original}</div>{current.beispiel && <div style={{ marginTop: '1rem', color: '#6b7280', fontStyle: 'italic' }}>{current.beispiel}</div>}</div>{mode === 'speech' && !micReady && <div style={{ textAlign: 'center', padding: '2rem', background: '#f0fdfa', borderRadius: '1rem', marginBottom: '1rem' }}><div style={{ fontSize: '3rem' }}>🎙️</div><p>Bitte erlaube den Mikrofon-Zugriff für den Sprachtest.</p>{micError && <p style={{ color: '#dc2626' }}>{micError}</p>}<button onClick={requestMic} style={{ background: '#0f5156', color: 'white', padding: '0.75rem 2rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>Mikrofon erlauben</button></div>}{mode === 'speech' && micReady && <div style={{ textAlign: 'center', marginBottom: '1.5rem', color: isRecording ? '#dc2626' : '#6b7280' }}>{isRecording ? '🔴 Aufnahme läuft... Sprich jetzt!' : 'Bereit'}</div>}{showMc && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem' }}>{mcOptions.map(option => <button key={option} onClick={() => handleMcAnswer(option)} style={{ background: 'white', border: '2px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.85rem', cursor: 'pointer' }}>{option}</button>)}</div>}{!showMc && micReady && <button onClick={handleWeiter} style={{ width: '100%', background: '#0f5156', color: 'white', fontSize: '1.25rem', fontWeight: 700, padding: '1rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>{currentIndex === vocabList.length - 1 ? 'Test beenden ✓' : 'Weiter →'}</button>}</div>;
 };
 
 export default SprachTestPage;
