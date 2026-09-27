@@ -11,6 +11,13 @@ const normalize = (str = '') => str
   .trim()
   .replace(/\s+/g, ' ');
 
+// Entfernt direkt wiederholte Wörter ("hören hören" -> "hören"),
+// die bei zögerlichem Sprechen oft erkannt werden.
+const dedupeWords = (str = '') => str
+  .split(' ')
+  .filter((word, i, all) => i === 0 || word !== all[i - 1])
+  .join(' ');
+
 // Zerlegt Felder wie "Anzeige; Werbespot", "Rücken, Rückseite",
 // "Schauspieler/-in" oder "(sich) festhalten an" in einzelne Antworten.
 const expandAnswers = (value = '') => {
@@ -30,7 +37,7 @@ const expandAnswers = (value = '') => {
 };
 
 const findMatchingAnswer = (heard, correct) => {
-  const heardNormalized = normalize(heard);
+  const heardNormalized = dedupeWords(normalize(heard));
   if (!heardNormalized) return null;
   return expandAnswers(correct).find(answer => normalize(answer) === heardNormalized) || null;
 };
@@ -91,16 +98,19 @@ const WORTART_LABELS = {
   particle: 'Partikel', phrase: 'Wendung', other: 'Sonstiges',
 };
 
+const formatScore = result => (Number.isFinite(result?.pronunciationScore)
+  ? ` (Aussprache ${Math.round(result.pronunciationScore)}/100)`
+  : '');
+
 const statusLabel = result => {
   if (!result) return '⏳ Wartet';
   if (result.status === 'recording') return '🔴 Aufnahme...';
   if (result.status === 'uploading') return '⬆️ Upload...';
   if (result.status === 'processing') return '🤖 Azure bewertet...';
   if (result.status === 'done') {
-    const score = Number.isFinite(result.pronunciationScore)
-      ? ` (${Math.round(result.pronunciationScore)}/100)`
-      : '';
-    return result.correct ? `✅ Richtig${score}` : `❌ Falsch${score} ("${result.text || '–'}")`;
+    return result.correct
+      ? `✅ Richtig${formatScore(result)}`
+      : `❌ Falsch${formatScore(result)} ("${result.text || '–'}")`;
   }
   return '⏳ Wartet';
 };
@@ -193,11 +203,10 @@ const SprachTestPage = () => {
       const pronunciationScore = Number.isFinite(Number(result.pronunciationScore))
         ? Number(result.pronunciationScore)
         : null;
-      const matched = findMatchingAnswer(result.text, vocabItem.uebersetzung);
-      const scoreApplies = matched && normalize(matched) === normalize(referenceText);
-      const correct = Boolean(matched) && (
-        !scoreApplies || (pronunciationScore !== null && pronunciationScore >= 60)
-      );
+      // Richtig ist die Antwort, wenn das erkannte Wort einer gültigen
+      // Variante entspricht. Der Aussprachewert wird nur angezeigt und
+      // entscheidet nicht mehr über richtig/falsch.
+      const correct = speechMatches(result.text, vocabItem.uebersetzung);
       updateTranscription(vocabItem.id, {
         status: 'done',
         text: result.text || '',
@@ -442,7 +451,7 @@ const SprachTestPage = () => {
     return <div style={{ maxWidth: '34rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}><h2 style={{ color: '#0f5156' }}>🧠 KI wertet Antworten aus...</h2><p style={{ color: '#6b7280' }}>Fertig: {done} / {vocabList.length}</p><p style={{ color: '#0f766e' }}>{active ? `${active.vocab.original}: ${statusLabel(active.result)}` : '✅ Alle Aufnahmen verarbeitet'}</p>{entries.map(({ vocab, result }) => <div key={vocab.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.45rem 0' }}><span>{vocab.original}</span><span style={{ color: statusColor(result) }}>{statusLabel(result)}</span></div>)}</div>;
   }
 
-  if (phase === 'results') return <div style={{ maxWidth: '32rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}><h2>Test beendet! 🎉</h2><p style={{ fontSize: '3rem', fontWeight: 'bold', color: '#0f5156' }}>{score} / {vocabList.length}</p>{fehlerListe.length > 0 && <div style={{ textAlign: 'left', background: '#fef2f2', padding: '1rem', borderRadius: '0.75rem' }}><h3 style={{ color: '#991b1b' }}>Deine Fehler:</h3>{fehlerListe.map(v => <div key={v.id} style={{ marginBottom: '0.8rem' }}><strong>{v.original}</strong><br /><span style={{ color: '#166534' }}>Richtig: {v.uebersetzung}</span><br /><span style={{ color: '#991b1b' }}>Du sagtest: {transcriptions[v.id]?.text || '[Nichts]'}</span></div>)}</div>}<div style={{ display: 'flex', gap: '1rem', margin: '1.5rem 0' }}><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Gesamtzeit<br /><strong>{timeStats.total} s</strong></div><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Ø pro Wort<br /><strong>{timeStats.average} s</strong></div></div><button onClick={() => navigate('/lernen')} style={{ width: '100%', background: '#0f5156', color: 'white', padding: '1rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>Zurück zur Übersicht</button></div>;
+  if (phase === 'results') return <div style={{ maxWidth: '32rem', margin: '4rem auto', padding: '2rem', background: 'white', borderRadius: '1rem', textAlign: 'center', fontFamily: 'sans-serif' }}><h2>Test beendet! 🎉</h2><p style={{ fontSize: '3rem', fontWeight: 'bold', color: '#0f5156' }}>{score} / {vocabList.length}</p>{fehlerListe.length > 0 && <div style={{ textAlign: 'left', background: '#fef2f2', padding: '1rem', borderRadius: '0.75rem' }}><h3 style={{ color: '#991b1b' }}>Deine Fehler:</h3>{fehlerListe.map(v => <div key={v.id} style={{ marginBottom: '0.8rem' }}><strong>{v.original}</strong><br /><span style={{ color: '#166534' }}>Richtig: {v.uebersetzung}</span><br /><span style={{ color: '#991b1b' }}>Du sagtest: {transcriptions[v.id]?.text || '[Nichts]'}{formatScore(transcriptions[v.id])}</span></div>)}</div>}<div style={{ display: 'flex', gap: '1rem', margin: '1.5rem 0' }}><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Gesamtzeit<br /><strong>{timeStats.total} s</strong></div><div style={{ flex: 1, background: '#f3f4f6', padding: '1rem' }}>Ø pro Wort<br /><strong>{timeStats.average} s</strong></div></div><button onClick={() => navigate('/lernen')} style={{ width: '100%', background: '#0f5156', color: 'white', padding: '1rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' }}>Zurück zur Übersicht</button></div>;
 
   const current = vocabList[currentIndex];
   const progress = ((currentIndex + 1) / vocabList.length) * 100;
