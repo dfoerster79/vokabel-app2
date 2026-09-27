@@ -24,8 +24,13 @@ export default async function handler(req, res) {
     if (!referenceText || !String(referenceText).trim()) {
       return res.status(400).json({ error: 'Kein Referenztext empfangen' });
     }
-    if (!process.env.AZURE_SPEECH_KEY || !process.env.AZURE_SPEECH_ENDPOINT) {
-      return res.status(500).json({ error: 'Azure Speech ist auf dem Server nicht konfiguriert' });
+
+    // Die REST-API für kurze Aufnahmen liegt NICHT unter dem Ressourcen-Endpunkt
+    // (<name>.cognitiveservices.azure.com), sondern unter dem regionalen
+    // STT-Host. Der Ressourcen-Endpunkt lieferte "404 Resource not found".
+    const region = (process.env.AZURE_SPEECH_REGION || '').trim();
+    if (!process.env.AZURE_SPEECH_KEY || !region) {
+      return res.status(500).json({ error: 'AZURE_SPEECH_KEY oder AZURE_SPEECH_REGION fehlt auf dem Server' });
     }
 
     const audioBuffer = Buffer.from(audioBase64, 'base64');
@@ -33,8 +38,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Audio-Puffer ist leer' });
     }
 
-    const endpoint = process.env.AZURE_SPEECH_ENDPOINT.replace(/\/+$/, '');
-    const url = `${endpoint}/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(language)}&format=detailed`;
+    const url = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1`
+      + `?language=${encodeURIComponent(language)}&format=detailed`;
     const assessmentConfig = {
       ReferenceText: String(referenceText).trim(),
       GradingSystem: 'HundredMark',
@@ -66,7 +71,7 @@ export default async function handler(req, res) {
     if (!azureResponse.ok) {
       console.error('Azure Speech response error:', azureResponse.status, payload);
       return res.status(azureResponse.status).json({
-        error: payload.error?.message || payload.error || 'Azure Speech Anfrage fehlgeschlagen',
+        error: payload.error?.message || payload.error || `Azure Speech Anfrage fehlgeschlagen (${azureResponse.status})`,
       });
     }
 
